@@ -441,6 +441,17 @@ function formatDay(d) {
 }
 
 // Get checkout slots for each day
+function getNights(events, day) {
+  // Find the booking that checks out on this day, return number of nights
+  for (const ev of events) {
+    if (sameDay(ev.end, day)) {
+      const nights = Math.round((ev.end - ev.start) / (1000 * 60 * 60 * 24));
+      return nights;
+    }
+  }
+  return null;
+}
+
 async function getCheckoutSlots() {
   const icals = {};
   await Promise.all(UNITS.map(async u => {
@@ -451,19 +462,22 @@ async function getCheckoutSlots() {
   const result = [];
 
   for (const day of days) {
-    const checkouts = [];
+    const checkouts = [];  // array of {unit, nights}
     const eStatus = classifyDay(icals['E']||[], day);
+    const eNights = getNights(icals['E']||[], day);
 
     for (const u of ['A','B','C','F']) {
       const s = classifyDay(icals[u]||[], day);
-      if (s==='checkout'||s==='both') checkouts.push(u);
+      if (s==='checkout'||s==='both') {
+        checkouts.push({ unit: u, nights: getNights(icals[u]||[], day) });
+      }
     }
     if (eStatus==='checkout'||eStatus==='both') {
-      if (!checkouts.includes('A')) checkouts.push('A');
-      if (!checkouts.includes('B')) checkouts.push('B');
+      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights });
+      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights });
     }
 
-    checkouts.sort();
+    checkouts.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, checkouts });
   }
   return result;
@@ -491,7 +505,7 @@ function renderCleanerSchedule(slots, claims, container) {
   container.innerHTML = '';
   for (const { day, checkouts } of slots) {
     // Only show slots that are unclaimed or claimed by me
-    const visibleSlots = checkouts.filter(unit => {
+    const visibleSlots = checkouts.filter(({unit}) => {
       const claim = claims[slotKey(day, unit)];
       return !claim || claim.cleaner === currentUser.name;
     });
@@ -508,10 +522,11 @@ function renderCleanerSchedule(slots, claims, container) {
       const slotsDiv = document.createElement('div');
       slotsDiv.className = 'slots';
 
-      for (const unit of visibleSlots) {
+      for (const {unit, nights} of visibleSlots) {
         const key = slotKey(day, unit);
         const claim = claims[key];
         const isMe = claim && claim.cleaner === currentUser.name;
+        const nightLabel = nights ? `${nights} night${nights===1?'':'s'}` : '';
 
         const slotEl = document.createElement('div');
         slotEl.className = `slot ${isMe ? 'claimed-mine' : 'unclaimed'}`;
@@ -522,7 +537,7 @@ function renderCleanerSchedule(slots, claims, container) {
           : `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
 
         slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-          <span class="slot-label">Checkout</span>
+          <span class="slot-label">${nightLabel}</span>
           ${rightSide}`;
         slotsDiv.appendChild(slotEl);
       }
@@ -604,19 +619,20 @@ function renderAdminSchedule(slots, claims, container) {
     const slotsDiv = document.createElement('div');
     slotsDiv.className = 'slots';
 
-    for (const unit of checkouts) {
+    for (const {unit, nights} of checkouts) {
       const key = slotKey(day, unit);
       const claim = claims[key];
+      const nightLabel = nights ? `${nights}n` : '';
       const slotEl = document.createElement('div');
       slotEl.className = `admin-slot ${claim ? 'claimed' : 'unclaimed'}`;
 
-      // Build cleaner options for dropdown
       const options = adminCleanerNames.map(n =>
         `<option value="${n}" ${claim && claim.cleaner===n ? 'selected' : ''}>${n}</option>`
       ).join('');
 
       slotEl.innerHTML = `
         <span style="font-weight:500;min-width:4rem;">Unit ${unit}</span>
+        <span style="font-size:0.72rem;color:var(--muted);min-width:2.5rem;">${nightLabel}</span>
         <span style="flex:1;padding:0 0.5rem;font-size:0.75rem;color:var(--muted);">Checkout</span>
         ${claim
           ? `<span style="font-size:0.78rem;color:var(--green);margin-right:0.5rem;">✓ ${claim.cleaner}</span>
