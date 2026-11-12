@@ -308,10 +308,13 @@ async function initFirebase(config) {
 async function bootApp() {
   try {
     await initFirebase(FIREBASE_CONFIG);
-    document.getElementById('config-notice').style.display = 'none';
     document.getElementById('login-card').style.display = 'block';
   } catch(e) {
     console.error('Firebase error:', e);
+    document.body.insertAdjacentHTML('afterbegin',
+      `<div style="background:#c8440a;color:white;padding:1rem;font-family:monospace;font-size:0.8rem;">
+        Firebase error: ${e.message}
+      </div>`);
   }
 }
 
