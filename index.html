@@ -240,8 +240,7 @@ h1 span { font-style: italic; color: var(--accent); }
     <div id="cleaner-view">
       <div class="legend">
         <div class="legend-item"><div class="legend-dot" style="background:var(--unclaimed);border:1px solid #e0c060;"></div> Available</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> My claim</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--claimed);border:1px solid var(--claimed-border);"></div> Taken</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> Your claim</div>
       </div>
       <div id="schedule-loading" class="loading"><span class="spinner"></span>Loading schedule...</div>
       <div id="schedule-container"></div>
@@ -289,7 +288,7 @@ const FIREBASE_CONFIG = {
   appId: "1:899961946120:web:c08c59b29be4d9d42911bd"
 };
 
-const ADMIN_PIN = '0000'; // Change this to your preferred admin PIN
+const ADMIN_PIN = '7553';
 
 let db, currentUser = null;
 
@@ -491,36 +490,36 @@ async function loadCleanerSchedule() {
 function renderCleanerSchedule(slots, claims, container) {
   container.innerHTML = '';
   for (const { day, checkouts } of slots) {
+    // Only show slots that are unclaimed or claimed by me
+    const visibleSlots = checkouts.filter(unit => {
+      const claim = claims[slotKey(day, unit)];
+      return !claim || claim.cleaner === currentUser.name;
+    });
+
     const block = document.createElement('div');
     block.className = 'day-block';
 
     const header = document.createElement('div');
     header.className = 'day-header';
-    header.innerHTML = `<span>${formatDay(day)}</span>${checkouts.length===0 ? '<span class="no-clean">No cleaning</span>' : ''}`;
+    header.innerHTML = `<span>${formatDay(day)}</span>${visibleSlots.length===0 ? '<span class="no-clean">No available slots</span>' : ''}`;
     block.appendChild(header);
 
-    if (checkouts.length > 0) {
+    if (visibleSlots.length > 0) {
       const slotsDiv = document.createElement('div');
       slotsDiv.className = 'slots';
 
-      for (const unit of checkouts) {
+      for (const unit of visibleSlots) {
         const key = slotKey(day, unit);
         const claim = claims[key];
         const isMe = claim && claim.cleaner === currentUser.name;
-        const isTaken = claim && !isMe;
 
         const slotEl = document.createElement('div');
-        slotEl.className = `slot ${isMe ? 'claimed-mine' : isTaken ? 'claimed-other' : 'unclaimed'}`;
+        slotEl.className = `slot ${isMe ? 'claimed-mine' : 'unclaimed'}`;
 
-        let rightSide = '';
-        if (isMe) {
-          rightSide = `<span class="slot-claimer mine">✓ You</span>
-            <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
-        } else if (isTaken) {
-          rightSide = `<span class="slot-claimer">${claim.cleaner}</span>`;
-        } else {
-          rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
-        }
+        let rightSide = isMe
+          ? `<span class="slot-claimer mine">✓ Claimed</span>
+             <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`
+          : `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
 
         slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
           <span class="slot-label">Checkout</span>
@@ -551,25 +550,33 @@ window.unclaim = async function(key) {
 };
 
 // ── Admin view ───────────────────────────────────────────
+let adminSlots = [], adminCleanerNames = [];
+
 async function loadAdminSchedule() {
   const container = document.getElementById('admin-schedule');
   const loading = document.getElementById('admin-loading');
 
-  const slots = await getCheckoutSlots();
+  adminSlots = await getCheckoutSlots();
   loading.style.display = 'none';
 
   const { collection, onSnapshot } = window._fb;
+
+  // Watch claims and cleaners simultaneously
+  onSnapshot(collection(db, 'cleaners'), snap => {
+    adminCleanerNames = [];
+    snap.forEach(d => adminCleanerNames.push(d.data().name));
+  });
+
   onSnapshot(collection(db, 'claims'), snap => {
     const claims = {};
     snap.forEach(d => { claims[d.id] = d.data(); });
-    renderAdminSchedule(slots, claims, container);
+    renderAdminSchedule(adminSlots, claims, container);
   });
 }
 
 function renderAdminSchedule(slots, claims, container) {
   container.innerHTML = '';
 
-  // Summary counts
   let totalSlots = 0, claimedCount = 0;
   for (const { checkouts } of slots) { totalSlots += checkouts.length; }
   for (const k of Object.keys(claims)) { claimedCount++; }
@@ -602,13 +609,26 @@ function renderAdminSchedule(slots, claims, container) {
       const claim = claims[key];
       const slotEl = document.createElement('div');
       slotEl.className = `admin-slot ${claim ? 'claimed' : 'unclaimed'}`;
+
+      // Build cleaner options for dropdown
+      const options = adminCleanerNames.map(n =>
+        `<option value="${n}" ${claim && claim.cleaner===n ? 'selected' : ''}>${n}</option>`
+      ).join('');
+
       slotEl.innerHTML = `
-        <span style="font-weight:500;">Unit ${unit}</span>
-        <span style="flex:1;padding:0 0.75rem;font-size:0.75rem;color:var(--muted);">Checkout</span>
-        <span style="font-size:0.78rem;color:${claim?'var(--green)':'var(--accent)'};">
-          ${claim ? '✓ ' + claim.cleaner : '○ Unclaimed'}
-        </span>
-        ${claim ? `<button class="admin-remove" onclick="adminRemove('${key}')" style="margin-left:0.75rem;">Remove</button>` : ''}
+        <span style="font-weight:500;min-width:4rem;">Unit ${unit}</span>
+        <span style="flex:1;padding:0 0.5rem;font-size:0.75rem;color:var(--muted);">Checkout</span>
+        ${claim
+          ? `<span style="font-size:0.78rem;color:var(--green);margin-right:0.5rem;">✓ ${claim.cleaner}</span>
+             <button class="admin-remove" onclick="adminRemove('${key}')">Remove</button>`
+          : adminCleanerNames.length > 0
+            ? `<select onchange="adminAssign('${key}','${dayKey(day)}','${unit}',this.value)"
+                style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer;">
+                <option value="">Assign cleaner…</option>
+                ${options}
+              </select>`
+            : `<span style="font-size:0.75rem;color:var(--muted);">No cleaners added</span>`
+        }
       `;
       slotsDiv.appendChild(slotEl);
     }
@@ -616,6 +636,17 @@ function renderAdminSchedule(slots, claims, container) {
     container.appendChild(block);
   }
 }
+
+window.adminAssign = async function(key, date, unit, cleanerName) {
+  if (!cleanerName) return;
+  const { doc, setDoc } = window._fb;
+  await setDoc(doc(db, 'claims', key), {
+    cleaner: cleanerName,
+    date, unit,
+    claimedAt: new Date().toISOString(),
+    assignedByAdmin: true
+  });
+};
 
 window.adminRemove = async function(key) {
   const { doc, deleteDoc } = window._fb;
