@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bau Cleaning">
+<title>Bau Guesthaus — Cleaning Scheduler</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f5f0e8;
+  --paper: #fdfaf4;
+  --ink: #1a1610;
+  --muted: #7a6f5e;
+  --accent: #c8440a;
+  --green: #2a6b4a;
+  --border: #d4c9b0;
+  --claimed: #d4edda;
+  --claimed-border: #2a6b4a;
+  --unclaimed: #fff3cd;
+  --unclaimed-border: #c8440a;
+  --mine: #cce5ff;
+  --mine-border: #1a6fad;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'DM Mono', monospace;
+  min-height: 100vh;
+  padding: 1.5rem 1rem 3rem;
+}
+.container { max-width: 700px; margin: 0 auto; }
+h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 1.8rem;
+  line-height: 1.1;
+  margin-bottom: 0.3rem;
+}
+h1 span { font-style: italic; color: var(--accent); }
+.subtitle { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.05em; margin-bottom: 1.5rem; }
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.card-title {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.9rem;
+}
+
+/* Login */
+.login-fields { display: flex; flex-direction: column; gap: 0.75rem; }
+.login-fields input {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+  width: 100%;
+}
+.btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.85rem;
+  padding: 0.6rem 1.2rem;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+}
+.btn-primary { background: var(--accent); color: white; }
+.btn-green { background: var(--green); color: white; }
+.btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--ink); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+
+.status { font-size: 0.78rem; margin-top: 0.5rem; }
+.status.error { color: var(--accent); }
+.status.ok { color: var(--green); }
+
+/* User bar */
+#user-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+}
+#user-bar .name { font-weight: 500; }
+#user-bar .role { color: var(--muted); font-size: 0.7rem; margin-left: 0.5rem; }
+
+/* Schedule */
+.day-block {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+.day-header {
+  background: var(--bg);
+  padding: 0.5rem 0.9rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+}
+.day-header .no-clean {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.slots { padding: 0.5rem 0.9rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-radius: 3px;
+  font-size: 0.82rem;
+  border: 1px solid transparent;
+}
+.slot.unclaimed {
+  background: var(--unclaimed);
+  border-color: #e0c060;
+}
+.slot.claimed-other {
+  background: var(--claimed);
+  border-color: var(--claimed-border);
+  opacity: 0.75;
+}
+.slot.claimed-mine {
+  background: var(--mine);
+  border-color: var(--mine-border);
+}
+.slot-unit { font-weight: 500; min-width: 2rem; }
+.slot-label { flex: 1; padding: 0 0.75rem; color: var(--muted); font-size: 0.75rem; }
+.slot-claimer { font-size: 0.75rem; color: var(--green); }
+.slot-claimer.mine { color: var(--mine-border); }
+.claim-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 3px;
+  border: 1px solid;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.claim-btn.claim { background: var(--green); color: white; border-color: var(--green); }
+.claim-btn.unclaim { background: white; color: var(--mine-border); border-color: var(--mine-border); }
+
+/* Admin */
+.admin-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  border: 1px solid transparent;
+  margin-bottom: 0.3rem;
+}
+.admin-slot.unclaimed { background: var(--unclaimed); border-color: #e0c060; }
+.admin-slot.claimed { background: var(--claimed); border-color: var(--claimed-border); }
+.admin-remove { font-size: 0.65rem; color: var(--accent); cursor: pointer; text-decoration: underline; background: none; border: none; font-family: inherit; }
+
+/* Loading */
+.loading { text-align: center; padding: 2rem; color: var(--muted); font-size: 0.8rem; }
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+  margin-right: 0.5rem; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Tabs */
+.tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.tab {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  background: var(--paper);
+  color: var(--muted);
+}
+.tab.active { background: var(--ink); color: white; border-color: var(--ink); }
+
+.legend { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; color: var(--muted); }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+#app { display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Bau Guesthaus<br><span>Cleaning Scheduler</span></h1>
+    <p class="subtitle">Claim your cleaning slots for the next 14 days</p>
+  </header>
+
+  <!-- Firebase config notice -->
+  <div id="config-notice" class="card" style="border-color: var(--accent);">
+    <div class="card-title">⚙️ Setup Required</div>
+    <p style="font-size:0.82rem; margin-bottom:0.75rem;">Paste your Firebase config below to activate the app.</p>
+    <textarea id="config-input" rows="10" style="width:100%;font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.5rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);" placeholder='Paste your firebaseConfig object here, e.g.:
+{
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "..."
+}'></textarea>
+    <button class="btn btn-primary" style="margin-top:0.75rem;" onclick="saveConfig()">Save & Activate</button>
+    <div class="status" id="config-status"></div>
+  </div>
+
+  <!-- Login -->
+  <div id="login-card" class="card" style="display:none;">
+    <div class="card-title">Sign In</div>
+    <div class="login-fields">
+      <input type="text" id="login-name" placeholder="Your name" autocomplete="name" />
+      <input type="password" id="login-pin" placeholder="PIN" inputmode="numeric" maxlength="6" />
+    </div>
+    <button class="btn btn-primary" style="margin-top:0.75rem;width:100%;" onclick="login()">Sign In</button>
+    <div class="status" id="login-status"></div>
+  </div>
+
+  <!-- User bar -->
+  <div id="user-bar">
+    <div><span class="name" id="bar-name"></span><span class="role" id="bar-role"></span></div>
+    <button class="btn btn-ghost" style="font-size:0.72rem;padding:0.3rem 0.7rem;" onclick="logout()">Sign out</button>
+  </div>
+
+  <!-- Main app -->
+  <div id="app">
+    <!-- Cleaner view -->
+    <div id="cleaner-view">
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--unclaimed);border:1px solid #e0c060;"></div> Available</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> My claim</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--claimed);border:1px solid var(--claimed-border);"></div> Taken</div>
+      </div>
+      <div id="schedule-loading" class="loading"><span class="spinner"></span>Loading schedule...</div>
+      <div id="schedule-container"></div>
+    </div>
+
+    <!-- Admin view -->
+    <div id="admin-view" style="display:none;">
+      <div class="tabs">
+        <button class="tab active" onclick="showAdminTab('overview')">Overview</button>
+        <button class="tab" onclick="showAdminTab('cleaners')">Manage Cleaners</button>
+      </div>
+
+      <div id="admin-overview">
+        <div id="admin-loading" class="loading"><span class="spinner"></span>Loading...</div>
+        <div id="admin-schedule"></div>
+      </div>
+
+      <div id="admin-cleaners" style="display:none;">
+        <div class="card">
+          <div class="card-title">Add Cleaner</div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <input type="text" id="new-cleaner-name" placeholder="Name" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);flex:1;min-width:120px;" />
+            <input type="password" id="new-cleaner-pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);width:160px;" />
+            <button class="btn btn-green" onclick="addCleaner()">Add</button>
+          </div>
+          <div class="status" id="add-cleaner-status"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Current Cleaners</div>
+          <div id="cleaners-list"><span style="color:var(--muted);font-size:0.8rem;">Loading...</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+// ── Firebase config ───────────────────────────────────────
+const STORED_CONFIG_KEY = 'bau_fb_config';
+const ADMIN_PIN = '0000'; // Change this after setup!
+
+let db, currentUser = null;
+
+async function initFirebase(config) {
+  const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
+  const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, onSnapshot, query, where }
+    = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
+
+  const app = initializeApp(config);
+  db = getFirestore(app);
+  window._fb = { doc, getDoc, setDoc, deleteDoc, collection, onSnapshot, query, where };
+  return true;
+}
+
+// ── Config setup ─────────────────────────────────────────
+window.saveConfig = async function() {
+  const raw = document.getElementById('config-input').value.trim();
+  const statusEl = document.getElementById('config-status');
+  try {
+    // Parse config — handle both object literal and JSON
+    const cleaned = raw.replace(/(\w+):/g, '"$1":').replace(/'/g, '"');
+    let cfg;
+    try { cfg = JSON.parse(cleaned); } catch { cfg = eval('(' + raw + ')'); }
+    if (!cfg.apiKey || !cfg.projectId) throw new Error('Missing apiKey or projectId');
+    localStorage.setItem(STORED_CONFIG_KEY, JSON.stringify(cfg));
+    statusEl.textContent = '✓ Saved! Loading...';
+    statusEl.className = 'status ok';
+    await bootApp(cfg);
+  } catch(e) {
+    statusEl.textContent = '✗ Could not parse config: ' + e.message;
+    statusEl.className = 'status error';
+  }
+};
+
+// ── Boot ─────────────────────────────────────────────────
+async function bootApp(cfg) {
+  try {
+    await initFirebase(cfg);
+    document.getElementById('config-notice').style.display = 'none';
+    document.getElementById('login-card').style.display = 'block';
+  } catch(e) {
+    document.getElementById('config-status').textContent = '✗ Firebase error: ' + e.message;
+  }
+}
+
+// ── Login ─────────────────────────────────────────────────
+window.login = async function() {
+  const name = document.getElementById('login-name').value.trim();
+  const pin  = document.getElementById('login-pin').value.trim();
+  const statusEl = document.getElementById('login-status');
+  if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
+
+  // Admin check
+  if (pin === ADMIN_PIN) {
+    currentUser = { name, role: 'admin' };
+    showApp();
+    return;
+  }
+
+  // Cleaner check
+  const { doc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
+  if (!snap.exists() || snap.data().pin !== pin) {
+    statusEl.textContent = 'Name or PIN not recognized.';
+    statusEl.className = 'status error';
+    return;
+  }
+  currentUser = { name: snap.data().name, role: 'cleaner' };
+  showApp();
+};
+
+window.logout = function() {
+  currentUser = null;
+  document.getElementById('user-bar').style.display = 'none';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-card').style.display = 'block';
+  document.getElementById('login-pin').value = '';
+};
+
+function showApp() {
+  document.getElementById('login-card').style.display = 'none';
+  const bar = document.getElementById('user-bar');
+  bar.style.display = 'flex';
+  document.getElementById('bar-name').textContent = currentUser.name;
+  document.getElementById('bar-role').textContent = currentUser.role === 'admin' ? ' · Admin' : ' · Cleaner';
+  document.getElementById('app').style.display = 'block';
+
+  if (currentUser.role === 'admin') {
+    document.getElementById('cleaner-view').style.display = 'none';
+    document.getElementById('admin-view').style.display = 'block';
+    loadAdminSchedule();
+    loadCleanersList();
+  } else {
+    document.getElementById('cleaner-view').style.display = 'block';
+    document.getElementById('admin-view').style.display = 'none';
+    loadCleanerSchedule();
+  }
+}
+
+// ── iCal / Schedule ──────────────────────────────────────
+const WORKER = 'https://green-poetry-6240.satoru185.workers.dev/';
+const UNITS = ['A','B','C','F','E'];
+
+async function fetchICal(unit) {
+  const res = await fetch(`${WORKER}?unit=${unit}&_=${Date.now()}`, { cache: 'no-store' });
+  return res.text();
+}
+
+function parseICal(text) {
+  const events = [];
+  const blocks = text.split('BEGIN:VEVENT');
+  for (let i = 1; i < blocks.length; i++) {
+    const b = blocks[i];
+    const startM = b.match(/DTSTART(?:;VALUE=DATE)?:(\d{8})/);
+    const endM   = b.match(/DTEND(?:;VALUE=DATE)?:(\d{8})/);
+    const sumM   = b.match(/SUMMARY:(.+)/);
+    if (!startM || !endM) continue;
+    const summary = sumM ? sumM[1].trim() : '';
+    if (/not available/i.test(summary)) continue;
+    const start = parseDate(startM[1]);
+    const end   = parseDate(endM[1]);
+    events.push({ start, end });
+  }
+  return events;
+}
+
+function parseDate(s) {
+  const d = new Date(+s.slice(0,4), +s.slice(4,6)-1, +s.slice(6,8));
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function sameDay(a, b) {
+  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+}
+
+function classifyDay(events, day) {
+  let result = null;
+  for (const ev of events) {
+    if (sameDay(ev.end, day))   result = result==='checkin' ? 'both' : 'checkout';
+    else if (sameDay(ev.start, day)) result = result==='checkout' ? 'both' : 'checkin';
+    else if (ev.start < day && ev.end > day && !result) result = 'ongoing';
+  }
+  return result;
+}
+
+function getDays(n=14) {
+  const days = [];
+  const start = new Date(); start.setHours(0,0,0,0);
+  for (let i = 0; i < n; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    days.push(d);
+  }
+  return days;
+}
+
+function dayKey(d) {
+  return d.toISOString().slice(0,10); // YYYY-MM-DD
+}
+
+function slotKey(date, unit) {
+  return `${dayKey(date)}_${unit}`;
+}
+
+function formatDay(d) {
+  return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+}
+
+// Get checkout slots for each day
+async function getCheckoutSlots() {
+  const icals = {};
+  await Promise.all(UNITS.map(async u => {
+    try { icals[u] = parseICal(await fetchICal(u)); } catch { icals[u] = []; }
+  }));
+
+  const days = getDays(14);
+  const result = [];
+
+  for (const day of days) {
+    const checkouts = [];
+    const eStatus = classifyDay(icals['E']||[], day);
+
+    for (const u of ['A','B','C','F']) {
+      const s = classifyDay(icals[u]||[], day);
+      if (s==='checkout'||s==='both') checkouts.push(u);
+    }
+    if (eStatus==='checkout'||eStatus==='both') {
+      if (!checkouts.includes('A')) checkouts.push('A');
+      if (!checkouts.includes('B')) checkouts.push('B');
+    }
+
+    checkouts.sort();
+    result.push({ day, checkouts });
+  }
+  return result;
+}
+
+// ── Cleaner view ─────────────────────────────────────────
+async function loadCleanerSchedule() {
+  const container = document.getElementById('schedule-container');
+  const loading = document.getElementById('schedule-loading');
+  container.innerHTML = '';
+
+  const slots = await getCheckoutSlots();
+  loading.style.display = 'none';
+
+  const { collection, onSnapshot } = window._fb;
+  // Listen for real-time claim updates
+  onSnapshot(collection(db, 'claims'), snap => {
+    const claims = {};
+    snap.forEach(d => { claims[d.id] = d.data(); });
+    renderCleanerSchedule(slots, claims, container);
+  });
+}
+
+function renderCleanerSchedule(slots, claims, container) {
+  container.innerHTML = '';
+  for (const { day, checkouts } of slots) {
+    const block = document.createElement('div');
+    block.className = 'day-block';
+
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.innerHTML = `<span>${formatDay(day)}</span>${checkouts.length===0 ? '<span class="no-clean">No cleaning</span>' : ''}`;
+    block.appendChild(header);
+
+    if (checkouts.length > 0) {
+      const slotsDiv = document.createElement('div');
+      slotsDiv.className = 'slots';
+
+      for (const unit of checkouts) {
+        const key = slotKey(day, unit);
+        const claim = claims[key];
+        const isMe = claim && claim.cleaner === currentUser.name;
+        const isTaken = claim && !isMe;
+
+        const slotEl = document.createElement('div');
+        slotEl.className = `slot ${isMe ? 'claimed-mine' : isTaken ? 'claimed-other' : 'unclaimed'}`;
+
+        let rightSide = '';
+        if (isMe) {
+          rightSide = `<span class="slot-claimer mine">✓ You</span>
+            <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
+        } else if (isTaken) {
+          rightSide = `<span class="slot-claimer">${claim.cleaner}</span>`;
+        } else {
+          rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
+        }
+
+        slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
+          <span class="slot-label">Checkout</span>
+          ${rightSide}`;
+        slotsDiv.appendChild(slotEl);
+      }
+      block.appendChild(slotsDiv);
+    }
+    container.appendChild(block);
+  }
+}
+
+window.claimSlot = async function(key, date, unit) {
+  const { doc, setDoc } = window._fb;
+  await setDoc(doc(db, 'claims', key), {
+    cleaner: currentUser.name,
+    date, unit,
+    claimedAt: new Date().toISOString()
+  });
+};
+
+window.unclaim = async function(key) {
+  const { doc, deleteDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'claims', key));
+  if (snap.exists() && snap.data().cleaner === currentUser.name) {
+    await deleteDoc(doc(db, 'claims', key));
+  }
+};
+
+// ── Admin view ───────────────────────────────────────────
+async function loadAdminSchedule() {
+  const container = document.getElementById('admin-schedule');
+  const loading = document.getElementById('admin-loading');
+
+  const slots = await getCheckoutSlots();
+  loading.style.display = 'none';
+
+  const { collection, onSnapshot } = window._fb;
+  onSnapshot(collection(db, 'claims'), snap => {
+    const claims = {};
+    snap.forEach(d => { claims[d.id] = d.data(); });
+    renderAdminSchedule(slots, claims, container);
+  });
+}
+
+function renderAdminSchedule(slots, claims, container) {
+  container.innerHTML = '';
+
+  // Summary counts
+  let totalSlots = 0, claimedCount = 0;
+  for (const { checkouts } of slots) { totalSlots += checkouts.length; }
+  for (const k of Object.keys(claims)) { claimedCount++; }
+
+  const summary = document.createElement('div');
+  summary.className = 'card';
+  summary.innerHTML = `<div class="card-title">Summary</div>
+    <div style="font-size:0.85rem;">
+      <span style="color:var(--green);">✓ ${claimedCount} claimed</span> &nbsp;·&nbsp;
+      <span style="color:var(--accent);">○ ${totalSlots-claimedCount} unclaimed</span> &nbsp;·&nbsp;
+      ${totalSlots} total slots
+    </div>`;
+  container.appendChild(summary);
+
+  for (const { day, checkouts } of slots) {
+    if (checkouts.length === 0) continue;
+    const block = document.createElement('div');
+    block.className = 'day-block';
+
+    const header = document.createElement('div');
+    header.className = 'day-header';
+    header.textContent = formatDay(day);
+    block.appendChild(header);
+
+    const slotsDiv = document.createElement('div');
+    slotsDiv.className = 'slots';
+
+    for (const unit of checkouts) {
+      const key = slotKey(day, unit);
+      const claim = claims[key];
+      const slotEl = document.createElement('div');
+      slotEl.className = `admin-slot ${claim ? 'claimed' : 'unclaimed'}`;
+      slotEl.innerHTML = `
+        <span style="font-weight:500;">Unit ${unit}</span>
+        <span style="flex:1;padding:0 0.75rem;font-size:0.75rem;color:var(--muted);">Checkout</span>
+        <span style="font-size:0.78rem;color:${claim?'var(--green)':'var(--accent)'};">
+          ${claim ? '✓ ' + claim.cleaner : '○ Unclaimed'}
+        </span>
+        ${claim ? `<button class="admin-remove" onclick="adminRemove('${key}')" style="margin-left:0.75rem;">Remove</button>` : ''}
+      `;
+      slotsDiv.appendChild(slotEl);
+    }
+    block.appendChild(slotsDiv);
+    container.appendChild(block);
+  }
+}
+
+window.adminRemove = async function(key) {
+  const { doc, deleteDoc } = window._fb;
+  await deleteDoc(doc(db, 'claims', key));
+};
+
+// ── Admin — cleaners tab ──────────────────────────────────
+window.showAdminTab = function(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('admin-overview').style.display = tab==='overview' ? 'block' : 'none';
+  document.getElementById('admin-cleaners').style.display = tab==='cleaners' ? 'block' : 'none';
+};
+
+async function loadCleanersList() {
+  const { collection, onSnapshot } = window._fb;
+  onSnapshot(collection(db, 'cleaners'), snap => {
+    const list = document.getElementById('cleaners-list');
+    if (snap.empty) { list.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">No cleaners added yet.</span>'; return; }
+    list.innerHTML = '';
+    snap.forEach(d => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
+      row.innerHTML = `<span>${d.data().name}</span>
+        <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>`;
+      list.appendChild(row);
+    });
+  });
+}
+
+window.addCleaner = async function() {
+  const name = document.getElementById('new-cleaner-name').value.trim();
+  const pin  = document.getElementById('new-cleaner-pin').value.trim();
+  const statusEl = document.getElementById('add-cleaner-status');
+  if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
+  if (pin.length < 4) { statusEl.textContent = 'PIN must be 4–6 digits.'; statusEl.className='status error'; return; }
+  const { doc, setDoc } = window._fb;
+  await setDoc(doc(db, 'cleaners', name.toLowerCase()), { name, pin });
+  statusEl.textContent = `✓ ${name} added.`;
+  statusEl.className = 'status ok';
+  document.getElementById('new-cleaner-name').value = '';
+  document.getElementById('new-cleaner-pin').value = '';
+};
+
+window.removeCleaner = async function(id) {
+  const { doc, deleteDoc } = window._fb;
+  await deleteDoc(doc(db, 'cleaners', id));
+};
+
+// ── Init ─────────────────────────────────────────────────
+(async function init() {
+  const stored = localStorage.getItem(STORED_CONFIG_KEY);
+  if (stored) {
+    try {
+      const cfg = JSON.parse(stored);
+      await bootApp(cfg);
+    } catch(e) {
+      document.getElementById('config-notice').style.display = 'block';
+    }
+  } else {
+    document.getElementById('config-notice').style.display = 'block';
+  }
+})();
+</script>
+</body>
+</html>
