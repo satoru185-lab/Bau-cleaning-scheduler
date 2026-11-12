@@ -216,22 +216,6 @@ h1 span { font-style: italic; color: var(--accent); }
     <p class="subtitle">Claim your cleaning slots for the next 14 days</p>
   </header>
 
-  <!-- Firebase config notice -->
-  <div id="config-notice" class="card" style="border-color: var(--accent);">
-    <div class="card-title">⚙️ Setup Required</div>
-    <p style="font-size:0.82rem; margin-bottom:0.75rem;">Paste your Firebase config below to activate the app.</p>
-    <textarea id="config-input" rows="10" style="width:100%;font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.5rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);" placeholder='Paste your firebaseConfig object here, e.g.:
-{
-  apiKey: "...",
-  authDomain: "...",
-  projectId: "...",
-  storageBucket: "...",
-  messagingSenderId: "...",
-  appId: "..."
-}'></textarea>
-    <button class="btn btn-primary" style="margin-top:0.75rem;" onclick="saveConfig()">Save & Activate</button>
-    <div class="status" id="config-status"></div>
-  </div>
 
   <!-- Login -->
   <div id="login-card" class="card" style="display:none;">
@@ -296,8 +280,16 @@ h1 span { font-style: italic; color: var(--accent); }
 
 <script type="module">
 // ── Firebase config ───────────────────────────────────────
-const STORED_CONFIG_KEY = 'bau_fb_config';
-const ADMIN_PIN = '0000'; // Change this after setup!
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDuX4TVEewvrrwJqttBESb0AOf6gbJYkKs",
+  authDomain: "bau-guesthaus-cleaning.firebaseapp.com",
+  projectId: "bau-guesthaus-cleaning",
+  storageBucket: "bau-guesthaus-cleaning.firebasestorage.app",
+  messagingSenderId: "899961946120",
+  appId: "1:899961946120:web:c08c59b29be4d9d42911bd"
+};
+
+const ADMIN_PIN = '0000'; // Change this to your preferred admin PIN
 
 let db, currentUser = null;
 
@@ -312,34 +304,14 @@ async function initFirebase(config) {
   return true;
 }
 
-// ── Config setup ─────────────────────────────────────────
-window.saveConfig = async function() {
-  const raw = document.getElementById('config-input').value.trim();
-  const statusEl = document.getElementById('config-status');
-  try {
-    // Parse config — handle both object literal and JSON
-    const cleaned = raw.replace(/(\w+):/g, '"$1":').replace(/'/g, '"');
-    let cfg;
-    try { cfg = JSON.parse(cleaned); } catch { cfg = eval('(' + raw + ')'); }
-    if (!cfg.apiKey || !cfg.projectId) throw new Error('Missing apiKey or projectId');
-    localStorage.setItem(STORED_CONFIG_KEY, JSON.stringify(cfg));
-    statusEl.textContent = '✓ Saved! Loading...';
-    statusEl.className = 'status ok';
-    await bootApp(cfg);
-  } catch(e) {
-    statusEl.textContent = '✗ Could not parse config: ' + e.message;
-    statusEl.className = 'status error';
-  }
-};
-
 // ── Boot ─────────────────────────────────────────────────
-async function bootApp(cfg) {
+async function bootApp() {
   try {
-    await initFirebase(cfg);
+    await initFirebase(FIREBASE_CONFIG);
     document.getElementById('config-notice').style.display = 'none';
     document.getElementById('login-card').style.display = 'block';
   } catch(e) {
-    document.getElementById('config-status').textContent = '✗ Firebase error: ' + e.message;
+    console.error('Firebase error:', e);
   }
 }
 
@@ -691,19 +663,7 @@ window.removeCleaner = async function(id) {
 };
 
 // ── Init ─────────────────────────────────────────────────
-(async function init() {
-  const stored = localStorage.getItem(STORED_CONFIG_KEY);
-  if (stored) {
-    try {
-      const cfg = JSON.parse(stored);
-      await bootApp(cfg);
-    } catch(e) {
-      document.getElementById('config-notice').style.display = 'block';
-    }
-  } else {
-    document.getElementById('config-notice').style.display = 'block';
-  }
-})();
+bootApp();
 </script>
 </body>
 </html>
