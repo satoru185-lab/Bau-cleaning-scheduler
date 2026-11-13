@@ -762,12 +762,20 @@ function getNights(events, day) {
   return null;
 }
 
-async function getCheckoutSlots() {
+// Shared iCal cache so we only fetch once per session
+let _icalCache = null;
+async function fetchAllICals() {
+  if (_icalCache) return _icalCache;
   const icals = {};
   await Promise.all(UNITS.map(async u => {
     try { icals[u] = parseICal(await fetchICal(u)); } catch { icals[u] = []; }
   }));
+  _icalCache = icals;
+  return icals;
+}
 
+async function getCheckoutSlots() {
+  const icals = await fetchAllICals();
   const days = getDays(28);
   const result = [];
 
@@ -789,6 +797,37 @@ async function getCheckoutSlots() {
 
     checkouts.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, checkouts });
+  }
+  return result;
+}
+
+// Full schedule for admin — all units, all statuses
+async function getFullSchedule() {
+  const icals = await fetchAllICals();
+  const days = getDays(28);
+  const result = [];
+
+  for (const day of days) {
+    const unitRows = [];
+    const eStatus = classifyDay(icals['E']||[], day);
+    const eNights = getNights(icals['E']||[], day);
+
+    for (const u of ['A','B','C','F']) {
+      let status = classifyDay(icals[u]||[], day);
+      let nights = getNights(icals[u]||[], day);
+      // E combined: if E checks out, A and B become checkouts
+      if ((eStatus==='checkout'||eStatus==='both') && (u==='A'||u==='B')) {
+        if (!status || status==='checkin') {
+          status = eStatus;
+          nights = eNights;
+        }
+      }
+      unitRows.push({ unit: u, status: status || 'open', nights });
+    }
+    // E itself
+    unitRows.push({ unit: 'E', status: eStatus || 'open', nights: eNights, combined: true });
+    unitRows.sort((a,b) => a.unit.localeCompare(b.unit));
+    result.push({ day, unitRows });
   }
   return result;
 }
@@ -878,16 +917,20 @@ window.unclaim = async function(key) {
 // ── Admin view ───────────────────────────────────────────
 let adminSlots = [], adminCleanerNames = [];
 
+let adminFullSlots = [];
+
 async function loadAdminSchedule() {
   const container = document.getElementById('admin-schedule');
   const loading = document.getElementById('admin-loading');
 
-  adminSlots = await getCheckoutSlots();
+  // Load both views in parallel
+  const [full, checkout] = await Promise.all([getFullSchedule(), getCheckoutSlots()]);
+  adminFullSlots = full;
+  adminSlots = checkout;
   loading.style.display = 'none';
 
   const { collection, onSnapshot } = window._fb;
 
-  // Watch claims and cleaners simultaneously
   onSnapshot(collection(db, 'cleaners'), snap => {
     adminCleanerNames = [];
     snap.forEach(d => adminCleanerNames.push(d.data().name));
@@ -896,70 +939,99 @@ async function loadAdminSchedule() {
   onSnapshot(collection(db, 'claims'), snap => {
     const claims = {};
     snap.forEach(d => { claims[d.id] = d.data(); });
-    renderAdminSchedule(adminSlots, claims, container);
+    renderAdminSchedule(adminFullSlots, claims, container);
   });
 }
+
+// Status config
+const STATUS_CONFIG = {
+  checkout:  { label: 'Checkout',  bg: '#fff3cd', border: '#e0c060', color: '#7a5c00' },
+  checkin:   { label: 'Check-in',  bg: '#d4edda', border: '#2a6b4a', color: '#1a4a30' },
+  both:      { label: 'Chk-out / Chk-in', bg: '#fde8d8', border: '#c8440a', color: '#7a2200' },
+  ongoing:   { label: 'Occupied',  bg: '#e8eaf6', border: '#7986cb', color: '#3949ab' },
+  open:      { label: 'Open',      bg: 'var(--paper)', border: 'var(--border)', color: 'var(--muted)' },
+};
 
 function renderAdminSchedule(slots, claims, container) {
   container.innerHTML = '';
 
-  let totalSlots = 0, claimedCount = 0;
-  for (const { checkouts } of slots) { totalSlots += checkouts.length; }
-  for (const k of Object.keys(claims)) { claimedCount++; }
+  // Summary counts
+  let totalCheckouts = 0, claimedCount = 0;
+  for (const { unitRows } of slots) {
+    for (const { status } of unitRows) {
+      if (status === 'checkout' || status === 'both') totalCheckouts++;
+    }
+  }
+  for (const k of Object.keys(claims)) claimedCount++;
 
   const summary = document.createElement('div');
   summary.className = 'card';
   summary.innerHTML = `<div class="card-title">Summary</div>
-    <div style="font-size:0.85rem;">
-      <span style="color:var(--green);">✓ ${claimedCount} claimed</span> &nbsp;·&nbsp;
-      <span style="color:var(--accent);">○ ${totalSlots-claimedCount} unclaimed</span> &nbsp;·&nbsp;
-      ${totalSlots} total slots
+    <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
+      <span style="color:var(--green);">✓ ${claimedCount} cleaners assigned</span>
+      <span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} checkouts uncovered</span>
+    </div>
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;">
+      ${Object.entries(STATUS_CONFIG).map(([k,v]) =>
+        `<span style="font-size:0.68rem;padding:0.2rem 0.6rem;border-radius:3px;background:${v.bg};border:1px solid ${v.border};color:${v.color};">${v.label}</span>`
+      ).join('')}
     </div>`;
   container.appendChild(summary);
 
-  for (const { day, checkouts } of slots) {
-    if (checkouts.length === 0) continue;
+  for (const { day, unitRows } of slots) {
     const block = document.createElement('div');
     block.className = 'day-block';
+    block.style.marginBottom = '0.5rem';
 
+    const isToday = sameDay(day, new Date());
     const header = document.createElement('div');
     header.className = 'day-header';
-    header.textContent = formatDay(day);
+    header.style.fontWeight = isToday ? '600' : '';
+    header.innerHTML = `<span>${formatDay(day)}${isToday ? ' <span style="color:var(--accent);">· Today</span>' : ''}</span>`;
     block.appendChild(header);
 
-    const slotsDiv = document.createElement('div');
-    slotsDiv.className = 'slots';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.4rem;padding:0.6rem;';
 
-    for (const {unit, nights} of checkouts) {
+    for (const { unit, status, nights, combined } of unitRows) {
+      const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.open;
+      const isCheckout = status === 'checkout' || status === 'both';
       const key = slotKey(day, unit);
       const claim = claims[key];
       const nightLabel = nights ? `${nights}n` : '';
-      const slotEl = document.createElement('div');
-      slotEl.className = `admin-slot ${claim ? 'claimed' : 'unclaimed'}`;
 
-      const options = adminCleanerNames.map(n =>
-        `<option value="${n}" ${claim && claim.cleaner===n ? 'selected' : ''}>${n}</option>`
-      ).join('');
+      const cell = document.createElement('div');
+      cell.style.cssText = `background:${cfg.bg};border:1px solid ${cfg.border};border-radius:4px;padding:0.5rem 0.6rem;font-size:0.75rem;`;
 
-      slotEl.innerHTML = `
-        <span style="font-weight:500;min-width:4rem;">Unit ${unit}</span>
-        <span style="font-size:0.72rem;color:var(--muted);min-width:2.5rem;">${nightLabel}</span>
-        <span style="flex:1;padding:0 0.5rem;font-size:0.75rem;color:var(--muted);">Checkout</span>
-        ${claim
-          ? `<span style="font-size:0.78rem;color:var(--green);margin-right:0.5rem;">✓ ${claim.cleaner}</span>
-             <button class="admin-remove" onclick="adminRemove('${key}')">Remove</button>`
+      let assignHtml = '';
+      if (isCheckout) {
+        const options = adminCleanerNames.map(n =>
+          `<option value="${n}" ${claim && claim.cleaner===n ? 'selected':''}>${n}</option>`
+        ).join('');
+        assignHtml = claim
+          ? `<div style="margin-top:0.35rem;display:flex;align-items:center;gap:0.3rem;">
+               <span style="color:var(--green);font-size:0.7rem;">✓ ${claim.cleaner}</span>
+               <button onclick="adminRemove('${key}')" style="font-size:0.6rem;color:var(--accent);border:none;background:none;cursor:pointer;padding:0;">✕</button>
+             </div>`
           : adminCleanerNames.length > 0
             ? `<select onchange="adminAssign('${key}','${dayKey(day)}','${unit}',this.value)"
-                style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.25rem 0.4rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer;">
-                <option value="">Assign cleaner…</option>
-                ${options}
+                style="margin-top:0.35rem;width:100%;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.2rem 0.3rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
+                <option value="">Assign…</option>${options}
               </select>`
-            : `<span style="font-size:0.75rem;color:var(--muted);">No cleaners added</span>`
-        }
-      `;
-      slotsDiv.appendChild(slotEl);
+            : '';
+      }
+
+      cell.innerHTML = `
+        <div style="display:flex;align-items:baseline;justify-content:space-between;">
+          <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
+          <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
+        </div>
+        <div style="color:${cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
+        ${assignHtml}`;
+      grid.appendChild(cell);
     }
-    block.appendChild(slotsDiv);
+
+    block.appendChild(grid);
     container.appendChild(block);
   }
 }
