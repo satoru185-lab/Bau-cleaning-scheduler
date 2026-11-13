@@ -520,16 +520,28 @@ body { padding-bottom: 5rem; }
 
     <!-- Admin view -->
     <div id="admin-view" style="display:none;">
-      <div class="tabs">
-        <button class="tab active" onclick="showAdminTab('overview')">Overview</button>
-        <button class="tab" onclick="showAdminTab('cleaners')">Manage Cleaners</button>
+      <div class="tabs" id="admin-tabs">
+        <button class="tab active" onclick="showAdminTab('overview')">Schedule</button>
+        <button class="tab" onclick="showAdminTab('units')">Units</button>
+        <button class="tab" onclick="showAdminTab('cleaners')">Cleaners</button>
       </div>
 
+      <!-- Schedule tab -->
       <div id="admin-overview">
         <div id="admin-loading" class="loading"><span class="spinner"></span>Loading...</div>
         <div id="admin-schedule"></div>
       </div>
 
+      <!-- Units tab -->
+      <div id="admin-units" style="display:none;">
+        <div id="units-list-view">
+          <div class="card-title" style="margin-bottom:0.75rem;">Tap a unit to edit its checklist & photos</div>
+          <div style="display:flex;flex-direction:column;gap:0.6rem;" id="unit-cards"></div>
+        </div>
+        <div id="unit-detail-view" style="display:none;"></div>
+      </div>
+
+      <!-- Cleaners tab -->
       <div id="admin-cleaners" style="display:none;">
         <div class="card">
           <div class="card-title">Add Cleaner</div>
@@ -576,12 +588,12 @@ let db, currentUser = null;
 
 async function initFirebase(config) {
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
-  const { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, onSnapshot, query, where }
+  const { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, onSnapshot, query, where }
     = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
 
   const app = initializeApp(config);
   db = getFirestore(app);
-  window._fb = { doc, getDoc, setDoc, deleteDoc, collection, onSnapshot, query, where };
+  window._fb = { doc, getDoc, getDocs, setDoc, deleteDoc, collection, onSnapshot, query, where };
   return true;
 }
 
@@ -589,6 +601,7 @@ async function initFirebase(config) {
 async function bootApp() {
   try {
     await initFirebase(FIREBASE_CONFIG);
+    await loadChecklistsFromFirestore();
     document.getElementById('login-card').style.display = 'block';
   } catch(e) {
     console.error('Firebase error:', e);
@@ -955,12 +968,158 @@ window.adminRemove = async function(key) {
   await deleteDoc(doc(db, 'claims', key));
 };
 
-// ── Admin — cleaners tab ──────────────────────────────────
+// ── Admin — tabs ──────────────────────────────────────────
 window.showAdminTab = function(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
   document.getElementById('admin-overview').style.display = tab==='overview' ? 'block' : 'none';
+  document.getElementById('admin-units').style.display    = tab==='units'    ? 'block' : 'none';
   document.getElementById('admin-cleaners').style.display = tab==='cleaners' ? 'block' : 'none';
+  if (tab === 'units') renderUnitCards();
+};
+
+// ── Admin — Units management ───────────────────────────────
+function renderUnitCards() {
+  const wrap = document.getElementById('unit-cards');
+  wrap.innerHTML = '';
+  for (const unit of UNITS) {
+    const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;';
+    card.innerHTML = `
+      <div>
+        <div style="font-family:\'Fraunces\',serif;font-size:1.1rem;font-weight:600;">Unit ${unit}</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:0.2rem;">${rooms.length} rooms</div>
+      </div>
+      <span style="color:var(--muted);font-size:1.2rem;">›</span>`;
+    card.onclick = () => openUnitDetail(unit);
+    wrap.appendChild(card);
+  }
+}
+
+function openUnitDetail(unit) {
+  document.getElementById('units-list-view').style.display = 'none';
+  const detail = document.getElementById('unit-detail-view');
+  detail.style.display = 'block';
+  renderUnitDetail(unit);
+}
+
+function renderUnitDetail(unit) {
+  const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms;
+  const detail = document.getElementById('unit-detail-view');
+
+  let roomsHtml = rooms.map((room, ri) => {
+    const photoSrc = room.photo
+      ? `<img src="${room.photo}" style="width:100%;height:140px;object-fit:cover;border-radius:3px;display:block;" />`
+      : `<div style="width:100%;height:140px;background:var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:var(--muted);">No photo yet</div>`;
+
+    const itemsHtml = room.items.map((item, ii) =>
+      `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+        <input type="text" value="${item.replace(/"/g,'&quot;')}"
+          style="flex:1;font-family:\'DM Mono\',monospace;font-size:0.8rem;border:1px solid var(--border);border-radius:3px;padding:0.3rem 0.5rem;background:var(--bg);"
+          onchange="updateChecklistItem('${unit}',${ri},${ii},this.value)" />
+        <button onclick="removeChecklistItem('${unit}',${ri},${ii})"
+          style="font-size:0.7rem;color:var(--accent);border:none;background:none;cursor:pointer;padding:0.2rem 0.4rem;">✕</button>
+      </div>`
+    ).join('');
+
+    return `<div class="card" style="margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div class="card-title" style="margin:0;">${room.name}</div>
+      </div>
+
+      <!-- Photo -->
+      <div style="margin-bottom:0.75rem;">
+        ${photoSrc}
+        <label style="display:inline-block;margin-top:0.5rem;font-family:\'DM Mono\',monospace;font-size:0.72rem;padding:0.35rem 0.8rem;border:1px solid var(--border);border-radius:3px;cursor:pointer;background:var(--paper);">
+          📷 ${room.photo ? 'Replace photo' : 'Upload photo'}
+          <input type="file" accept="image/*" style="display:none;" onchange="uploadRoomPhoto('${unit}',${ri},this)" />
+        </label>
+        <span id="upload-status-${unit}-${ri}" style="font-size:0.72rem;color:var(--green);margin-left:0.5rem;"></span>
+      </div>
+
+      <!-- Checklist items -->
+      <div style="margin-bottom:0.5rem;">${itemsHtml}</div>
+      <button onclick="addChecklistItem('${unit}',${ri})"
+        style="font-family:\'DM Mono\',monospace;font-size:0.72rem;padding:0.3rem 0.7rem;border:1px dashed var(--border);border-radius:3px;background:none;cursor:pointer;color:var(--muted);">
+        + Add item
+      </button>
+    </div>`;
+  }).join('');
+
+  detail.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;">
+      <button onclick="backToUnits()" style="font-family:\'DM Mono\',monospace;font-size:0.75rem;color:var(--muted);border:none;background:none;cursor:pointer;">← Units</button>
+      <div style="font-family:\'Fraunces\',serif;font-size:1.3rem;font-weight:600;">Unit ${unit}</div>
+    </div>
+    ${roomsHtml}`;
+}
+
+window.backToUnits = function() {
+  document.getElementById('unit-detail-view').style.display = 'none';
+  document.getElementById('units-list-view').style.display = 'block';
+};
+
+window.updateChecklistItem = function(unit, roomIdx, itemIdx, value) {
+  UNIT_CHECKLISTS[unit].rooms[roomIdx].items[itemIdx] = value;
+  saveChecklistToFirestore(unit);
+};
+
+window.removeChecklistItem = function(unit, roomIdx, itemIdx) {
+  UNIT_CHECKLISTS[unit].rooms[roomIdx].items.splice(itemIdx, 1);
+  saveChecklistToFirestore(unit);
+  renderUnitDetail(unit);
+};
+
+window.addChecklistItem = function(unit, roomIdx) {
+  UNIT_CHECKLISTS[unit].rooms[roomIdx].items.push('New item');
+  saveChecklistToFirestore(unit);
+  renderUnitDetail(unit);
+};
+
+async function saveChecklistToFirestore(unit) {
+  const { doc, setDoc } = window._fb;
+  const data = { rooms: UNIT_CHECKLISTS[unit].rooms.map(r => ({
+    name: r.name,
+    photo: r.photo || null,
+    items: r.items
+  }))};
+  await setDoc(doc(db, 'checklists', unit), data);
+}
+
+async function loadChecklistsFromFirestore() {
+  const { collection, getDocs } = window._fb;
+  const snap = await getDocs(collection(db, 'checklists'));
+  snap.forEach(d => {
+    const unit = d.id;
+    if (UNIT_CHECKLISTS[unit]) {
+      UNIT_CHECKLISTS[unit].rooms = d.data().rooms;
+    }
+  });
+}
+
+window.uploadRoomPhoto = async function(unit, roomIdx, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById(`upload-status-${unit}-${roomIdx}`);
+  statusEl.textContent = 'Uploading…';
+
+  try {
+    const { getStorage, ref, uploadBytes, getDownloadURL } =
+      await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-storage.js');
+    const storage = getStorage();
+    const storageRef = ref(storage, `unit-photos/${unit}/room-${roomIdx}-${Date.now()}.jpg`);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    UNIT_CHECKLISTS[unit].rooms[roomIdx].photo = url;
+    await saveChecklistToFirestore(unit);
+    statusEl.textContent = '✓ Saved';
+    renderUnitDetail(unit);
+  } catch(e) {
+    statusEl.textContent = 'Upload failed: ' + e.message;
+    console.error(e);
+  }
 };
 
 async function loadCleanersList() {
