@@ -505,6 +505,10 @@ body { padding-bottom: 5rem; }
           <div class="card-title">Your upcoming cleans</div>
           <div id="my-claims-list" style="font-size:0.82rem;color:var(--muted);">Loading...</div>
         </div>
+        <div class="card" style="margin-top:0.5rem;">
+          <div class="card-title">Past cleans</div>
+          <div id="my-history-list" style="font-size:0.82rem;color:var(--muted);">Loading...</div>
+        </div>
       </div>
 
       <!-- Schedule tab -->
@@ -523,6 +527,7 @@ body { padding-bottom: 5rem; }
       <div class="tabs" id="admin-tabs">
         <button class="tab active" onclick="showAdminTab('overview')">Schedule</button>
         <button class="tab" onclick="showAdminTab('units')">Units</button>
+        <button class="tab" onclick="showAdminTab('history')">History</button>
         <button class="tab" onclick="showAdminTab('cleaners')">Cleaners</button>
       </div>
 
@@ -530,6 +535,12 @@ body { padding-bottom: 5rem; }
       <div id="admin-overview">
         <div id="admin-loading" class="loading"><span class="spinner"></span>Loading...</div>
         <div id="admin-schedule"></div>
+      </div>
+
+      <!-- History tab -->
+      <div id="admin-history" style="display:none;">
+        <div id="admin-history-loading" class="loading"><span class="spinner"></span>Loading history...</div>
+        <div id="admin-history-content"></div>
       </div>
 
       <!-- Units tab -->
@@ -666,6 +677,7 @@ function showApp() {
     document.getElementById('bottom-nav').style.display = 'flex';
     switchTab('home');
     loadCleanerSchedule();
+    loadMyHistory();
   }
 }
 
@@ -716,7 +728,7 @@ function classifyDay(events, day) {
   return result;
 }
 
-function getDays(n=14) {
+function getDays(n=28) {
   const days = [];
   const start = new Date(); start.setHours(0,0,0,0);
   for (let i = 0; i < n; i++) {
@@ -756,7 +768,7 @@ async function getCheckoutSlots() {
     try { icals[u] = parseICal(await fetchICal(u)); } catch { icals[u] = []; }
   }));
 
-  const days = getDays(14);
+  const days = getDays(28);
   const result = [];
 
   for (const day of days) {
@@ -974,8 +986,10 @@ window.showAdminTab = function(tab) {
   event.target.classList.add('active');
   document.getElementById('admin-overview').style.display = tab==='overview' ? 'block' : 'none';
   document.getElementById('admin-units').style.display    = tab==='units'    ? 'block' : 'none';
+  document.getElementById('admin-history').style.display  = tab==='history'  ? 'block' : 'none';
   document.getElementById('admin-cleaners').style.display = tab==='cleaners' ? 'block' : 'none';
   if (tab === 'units') renderUnitCards();
+  if (tab === 'history') loadAdminHistory();
 };
 
 // ── Admin — Units management ───────────────────────────────
@@ -1362,10 +1376,112 @@ function updateProgress(unit) {
   }
 }
 
-window.notifyOwner = function() {
+window.notifyOwner = async function() {
+  // Write to history collection
+  try {
+    const { doc, setDoc } = window._fb;
+    const historyKey = `${clState.date}_${clState.unit}`;
+    await setDoc(doc(db, 'history', historyKey), {
+      date: clState.date,
+      unit: clState.unit,
+      cleaner: currentUser.name,
+      nights: clState.nights || 0,
+      completedAt: new Date().toISOString()
+    });
+  } catch(e) { console.error('History write failed:', e); }
+
   const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
 };
+
+// ── Admin History ─────────────────────────────────────────
+async function loadAdminHistory() {
+  const loadingEl = document.getElementById('admin-history-loading');
+  const content = document.getElementById('admin-history-content');
+  loadingEl.style.display = 'block';
+  content.innerHTML = '';
+
+  const { collection, getDocs } = window._fb;
+  const snap = await getDocs(collection(db, 'history'));
+  loadingEl.style.display = 'none';
+
+  if (snap.empty) {
+    content.innerHTML = '<div class="card" style="color:var(--muted);font-size:0.82rem;">No completed cleans recorded yet. History is saved when a cleaner taps "Notify Satoru" after finishing.</div>';
+    return;
+  }
+
+  // Sort newest first
+  const records = [];
+  snap.forEach(d => records.push(d.data()));
+  records.sort((a,b) => b.date.localeCompare(a.date));
+
+  // Group by month
+  const byMonth = {};
+  for (const r of records) {
+    const month = r.date.slice(0,7); // YYYY-MM
+    if (!byMonth[month]) byMonth[month] = [];
+    byMonth[month].push(r);
+  }
+
+  for (const [month, recs] of Object.entries(byMonth).sort((a,b) => b[0].localeCompare(a[0]))) {
+    const [yr, mo] = month.split('-');
+    const label = new Date(+yr, +mo-1, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+
+    const block = document.createElement('div');
+    block.style.marginBottom = '1rem';
+    block.innerHTML = `<div class="card-title" style="margin-bottom:0.5rem;">${label}</div>`;
+
+    for (const r of recs) {
+      const d = new Date(r.date + 'T12:00:00');
+      const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+      const nightLabel = r.nights ? ` · ${r.nights}n` : '';
+      const completedStr = r.completedAt
+        ? new Date(r.completedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })
+        : '';
+
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;margin-bottom:0.4rem;';
+      row.innerHTML = `
+        <div>
+          <div style="font-size:0.85rem;font-weight:500;">${dateStr} — Unit ${r.unit}${nightLabel}</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">Cleaned by ${r.cleaner}${completedStr ? ' · Done at ' + completedStr : ''}</div>
+        </div>
+        <span style="font-size:1.1rem;">✅</span>`;
+      block.appendChild(row);
+    }
+    content.appendChild(block);
+  }
+}
+
+// ── Cleaner past cleans ───────────────────────────────────
+async function loadMyHistory() {
+  const { collection, getDocs } = window._fb;
+  const snap = await getDocs(collection(db, 'history'));
+
+  const mine = [];
+  snap.forEach(d => {
+    if (d.data().cleaner === currentUser.name) mine.push(d.data());
+  });
+  mine.sort((a,b) => b.date.localeCompare(a.date));
+
+  const wrap = document.getElementById('my-history-list');
+  if (!wrap) return;
+  if (mine.length === 0) {
+    wrap.innerHTML = '<span style="color:var(--muted);font-size:0.82rem;">No completed cleans yet.</span>';
+    return;
+  }
+  wrap.innerHTML = '';
+  for (const r of mine.slice(0, 20)) {
+    const d = new Date(r.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    const nightLabel = r.nights ? ` · ${r.nights} night${r.nights===1?'':'s'}` : '';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
+    row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span><span style="color:var(--green);">✅</span>`;
+    wrap.appendChild(row);
+  }
+}
 
 // ── Init ─────────────────────────────────────────────────
 bootApp();
