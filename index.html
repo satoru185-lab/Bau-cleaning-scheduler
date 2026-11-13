@@ -669,7 +669,7 @@ window.login = async function() {
     statusEl.className = 'status error';
     return;
   }
-  currentUser = { name: snap.data().name, role: 'cleaner' };
+  currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14 };
   showApp();
 };
 
@@ -798,7 +798,8 @@ async function fetchAllICals() {
 
 async function getCheckoutSlots() {
   const icals = await fetchAllICals();
-  const days = getDays(28);
+  const windowDays = (currentUser && currentUser.scheduleDays) ? currentUser.scheduleDays : 28;
+  const days = getDays(windowDays);
   const result = [];
 
   for (const day of days) {
@@ -1300,6 +1301,8 @@ window.uploadRoomPhoto = async function(unit, roomIdx, input) {
   }
 };
 
+const SCHEDULE_WINDOW_OPTIONS = [7, 14, 21, 30];
+
 async function loadCleanersList() {
   const { collection, onSnapshot } = window._fb;
   onSnapshot(collection(db, 'cleaners'), snap => {
@@ -1307,14 +1310,35 @@ async function loadCleanersList() {
     if (snap.empty) { list.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">No cleaners added yet.</span>'; return; }
     list.innerHTML = '';
     snap.forEach(d => {
+      const data = d.data();
+      const days = data.scheduleDays || 14;
+      const opts = SCHEDULE_WINDOW_OPTIONS.map(n =>
+        `<option value="${n}" ${days===n?'selected':''}>${n} days</option>`
+      ).join('');
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.4rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
-      row.innerHTML = `<span>${d.data().name}</span>
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;gap:0.5rem;';
+      row.innerHTML = `
+        <span style="flex:1;">${data.name}</span>
+        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
+          Window
+          <select onchange="setCleanerWindow('${d.id}', this.value)"
+            style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
+            ${opts}
+          </select>
+        </label>
         <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>`;
       list.appendChild(row);
     });
   });
 }
+
+window.setCleanerWindow = async function(id, days) {
+  const { doc, setDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', id));
+  if (snap.exists()) {
+    await setDoc(doc(db, 'cleaners', id), { ...snap.data(), scheduleDays: parseInt(days) });
+  }
+};
 
 window.addCleaner = async function() {
   const name = document.getElementById('new-cleaner-name').value.trim();
