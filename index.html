@@ -812,6 +812,7 @@ async function getFullSchedule() {
     const eStatus = classifyDay(icals['E']||[], day);
     const eNights = getNights(icals['E']||[], day);
 
+    const eActive = eStatus && eStatus !== 'open'; // E has a real booking
     for (const u of ['A','B','C','F']) {
       let status = classifyDay(icals[u]||[], day);
       let nights = getNights(icals[u]||[], day);
@@ -822,10 +823,16 @@ async function getFullSchedule() {
           nights = eNights;
         }
       }
+      // If E is active, A and B are unavailable unless they have their own booking
+      if (eActive && (u==='A'||u==='B') && (!status || status==='open')) {
+        status = 'unavailable';
+      }
       unitRows.push({ unit: u, status: status || 'open', nights });
     }
-    // E itself
-    unitRows.push({ unit: 'E', status: eStatus || 'open', nights: eNights, combined: true });
+    // Only show E if it has an actual booking
+    if (eActive) {
+      unitRows.push({ unit: 'E', status: eStatus, nights: eNights, combined: true });
+    }
     unitRows.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, unitRows });
   }
@@ -945,11 +952,12 @@ async function loadAdminSchedule() {
 
 // Status config
 const STATUS_CONFIG = {
-  checkout:  { label: 'Checkout',  bg: '#fff3cd', border: '#e0c060', color: '#7a5c00' },
-  checkin:   { label: 'Check-in',  bg: '#d4edda', border: '#2a6b4a', color: '#1a4a30' },
-  both:      { label: 'Chk-out / Chk-in', bg: '#fde8d8', border: '#c8440a', color: '#7a2200' },
-  ongoing:   { label: 'Occupied',  bg: '#e8eaf6', border: '#7986cb', color: '#3949ab' },
-  open:      { label: 'Open',      bg: 'var(--paper)', border: 'var(--border)', color: 'var(--muted)' },
+  checkout:    { label: 'Checkout',       bg: '#fff3cd', border: '#e0c060', color: '#7a5c00' },
+  checkin:     { label: 'Check-in',       bg: '#d4edda', border: '#2a6b4a', color: '#1a4a30' },
+  both:        { label: 'Chk-out / Chk-in', bg: '#fde8d8', border: '#c8440a', color: '#7a2200' },
+  ongoing:     { label: 'Occupied',       bg: '#e8eaf6', border: '#7986cb', color: '#3949ab' },
+  open:        { label: 'Open',           bg: 'var(--paper)', border: 'var(--border)', color: 'var(--muted)' },
+  unavailable: { label: 'N/A (Unit E)',   bg: '#f0ece4', border: '#c8b89a', color: '#a08060' },
 };
 
 function renderAdminSchedule(slots, claims, container) {
