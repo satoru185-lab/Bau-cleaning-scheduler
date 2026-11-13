@@ -612,7 +612,7 @@ async function initFirebase(config) {
 async function bootApp() {
   try {
     await initFirebase(FIREBASE_CONFIG);
-    await loadChecklistsFromFirestore();
+    await Promise.all([loadChecklistsFromFirestore(), loadCheckinTimes()]);
     document.getElementById('login-card').style.display = 'block';
   } catch(e) {
     console.error('Firebase error:', e);
@@ -881,9 +881,11 @@ function renderCleanerSchedule(slots, claims, container) {
 
       for (const {unit, nights} of visibleSlots) {
         const key = slotKey(day, unit);
+        const ciKey = `${dayKey(day)}_${unit}_ci`;
         const claim = claims[key];
         const isMe = claim && claim.cleaner === currentUser.name;
         const nightLabel = nights ? `${nights} night${nights===1?'':'s'}` : '';
+        const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
 
         const slotEl = document.createElement('div');
         slotEl.className = `slot ${isMe ? 'claimed-mine' : 'unclaimed'}`;
@@ -894,7 +896,7 @@ function renderCleanerSchedule(slots, claims, container) {
           : `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
 
         slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-          <span class="slot-label">${nightLabel}</span>
+          <span class="slot-label">${nightLabel}${isMe ? ` · Done by ${doneBy}` : ''}</span>
           ${rightSide}`;
         slotsDiv.appendChild(slotEl);
       }
@@ -911,6 +913,19 @@ window.claimSlot = async function(key, date, unit) {
     date, unit,
     claimedAt: new Date().toISOString()
   });
+  // Push notification to Satoru via Ntfy.sh
+  try {
+    const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+      method: 'POST',
+      headers: {
+        'Title': `Unit ${unit} claimed`,
+        'Priority': 'default',
+        'Tags': 'broom'
+      },
+      body: `${currentUser.name} claimed Unit ${unit} on ${dateLabel}`
+    });
+  } catch(e) { /* silent — don't block the claim if notification fails */ }
 };
 
 window.unclaim = async function(key) {
@@ -1004,13 +1019,32 @@ function renderAdminSchedule(slots, claims, container) {
     for (const { unit, status, nights, combined } of unitRows) {
       const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.open;
       const isCheckout = status === 'checkout' || status === 'both';
+      const isCheckin  = status === 'checkin'  || status === 'both';
       const key = slotKey(day, unit);
+      const ciKey = `${dayKey(day)}_${unit}_ci`; // separate key for checkin time
       const claim = claims[key];
       const nightLabel = nights ? `${nights}n` : '';
 
       const cell = document.createElement('div');
       cell.style.cssText = `background:${cfg.bg};border:1px solid ${cfg.border};border-radius:4px;padding:0.5rem 0.6rem;font-size:0.75rem;`;
 
+      // Check-in time dropdown (shown on checkin and both tiles)
+      let checkinHtml = '';
+      if (isCheckin) {
+        const curTime = checkinTimes[ciKey] || DEFAULT_CHECKIN;
+        const timeOpts = CHECKIN_TIMES.map(t =>
+          `<option value="${t}" ${t===curTime?'selected':''}>${t}</option>`
+        ).join('');
+        checkinHtml = `<div style="margin-top:0.3rem;">
+          <span style="font-size:0.65rem;color:${cfg.color};opacity:0.8;">Check-in: </span>
+          <select onchange="setCheckinTime('${ciKey}','${dayKey(day)}','${unit}',this.value)"
+            style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.15rem 0.25rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
+            ${timeOpts}
+          </select>
+        </div>`;
+      }
+
+      // Cleaner assign dropdown (shown on checkout and both tiles)
       let assignHtml = '';
       if (isCheckout) {
         const options = adminCleanerNames.map(n =>
@@ -1035,7 +1069,7 @@ function renderAdminSchedule(slots, claims, container) {
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
         <div style="color:${cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
-        ${assignHtml}`;
+        ${checkinHtml}${assignHtml}`;
       grid.appendChild(cell);
     }
 
@@ -1046,18 +1080,46 @@ function renderAdminSchedule(slots, claims, container) {
 
 window.adminAssign = async function(key, date, unit, cleanerName) {
   if (!cleanerName) return;
-  const { doc, setDoc } = window._fb;
+  const { doc, setDoc, getDoc } = window._fb;
+  // Preserve existing checkinTime if already set
+  const existing = await getDoc(doc(db, 'claims', key));
+  const checkinTime = existing.exists() ? (existing.data().checkinTime || '4:00 PM') : '4:00 PM';
   await setDoc(doc(db, 'claims', key), {
-    cleaner: cleanerName,
-    date, unit,
+    cleaner: cleanerName, date, unit,
     claimedAt: new Date().toISOString(),
-    assignedByAdmin: true
+    assignedByAdmin: true,
+    checkinTime
   });
 };
 
 window.adminRemove = async function(key) {
   const { doc, deleteDoc } = window._fb;
   await deleteDoc(doc(db, 'claims', key));
+};
+
+// ── Check-in time management ──────────────────────────────
+const CHECKIN_TIMES = ['12:00 PM','1:00 PM','2:00 PM','3:00 PM','4:00 PM','5:00 PM','6:00 PM'];
+const DEFAULT_CHECKIN = '4:00 PM';
+
+// checkinTimes cache: key → time (loaded from Firestore checkins collection)
+let checkinTimes = {};
+
+async function loadCheckinTimes() {
+  const { collection, getDocs } = window._fb;
+  const snap = await getDocs(collection(db, 'checkins'));
+  snap.forEach(d => { checkinTimes[d.id] = d.data().time; });
+}
+
+window.setCheckinTime = async function(key, date, unit, time) {
+  const { doc, setDoc } = window._fb;
+  checkinTimes[key] = time;
+  await setDoc(doc(db, 'checkins', key), { date, unit, time });
+  // Also update any existing claim for this slot
+  const { getDoc } = window._fb;
+  const claimSnap = await getDoc(doc(db, 'claims', key));
+  if (claimSnap.exists()) {
+    await setDoc(doc(db, 'claims', key), { ...claimSnap.data(), checkinTime: time });
+  }
 };
 
 // ── Admin — tabs ──────────────────────────────────────────
@@ -1281,11 +1343,13 @@ function renderHomeTab(slots, claims) {
     const isToday = sameDay(day, new Date());
     const dateLabel = isToday ? 'Today' : formatDay(day);
     const nightLabel = nights ? ` · ${nights} night${nights===1?'':'s'}` : '';
+    const ciKey = `${dayKey(day)}_${unit}_ci`;
+    const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
     area.innerHTML = `
       <div class="next-clean-card">
         <div class="next-clean-label">Your next clean</div>
         <div class="next-clean-date">${dateLabel}</div>
-        <div class="next-clean-unit">Unit ${unit}${nightLabel}</div>
+        <div class="next-clean-unit">Unit ${unit}${nightLabel} · Done by ${doneBy}</div>
         <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">
           Open cleaning checklist →
         </button>
@@ -1365,6 +1429,9 @@ const UNIT_CHECKLISTS = {
 
 // owner phone number for SMS
 const OWNER_PHONE = '8456168631';
+
+// Ntfy.sh push notification topic (Satoru's private channel)
+const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
 
 // Checklist state
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {} };
