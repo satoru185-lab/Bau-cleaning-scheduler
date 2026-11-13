@@ -6,8 +6,6 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bau Cleaning">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Bau Cleaning">
 <title>Bau Guesthaus — Cleaning Scheduler</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
 <style>
@@ -210,15 +208,273 @@ h1 span { font-style: italic; color: var(--accent); }
 .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
 
 #app { display: none; }
+
+/* Bottom nav */
+.bottom-nav {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--paper);
+  border-top: 1px solid var(--border);
+  display: flex;
+  z-index: 100;
+}
+.nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.6rem 0.5rem 0.8rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  gap: 0.2rem;
+}
+.nav-btn .nav-icon { font-size: 1.3rem; line-height: 1; }
+.nav-btn.active { color: var(--accent); }
+body { padding-bottom: 5rem; }
+
+/* Next-clean banner */
+.next-clean-card {
+  background: var(--ink);
+  color: white;
+  border-radius: 4px;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.next-clean-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 0.4rem;
+}
+.next-clean-date {
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  font-weight: 300;
+  font-style: italic;
+  line-height: 1.1;
+  margin-bottom: 0.3rem;
+}
+.next-clean-unit {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.75);
+}
+.next-clean-card .open-checklist {
+  margin-top: 1rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 3px;
+  color: white;
+  cursor: pointer;
+  letter-spacing: 0.03em;
+}
+
+/* Checklist modal */
+.checklist-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 200;
+  overflow-y: auto;
+}
+.checklist-header {
+  background: var(--paper);
+  border-bottom: 1px solid var(--border);
+  padding: 1rem 1rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.checklist-header-top {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.back-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0.3rem 0;
+}
+.checklist-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+.checklist-subtitle {
+  font-size: 0.7rem;
+  color: var(--muted);
+  flex: 1;
+}
+
+/* Progress bar */
+.progress-bar-wrap {
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Room tabs */
+.room-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-top: 0.75rem;
+}
+.room-tabs::-webkit-scrollbar { display: none; }
+.room-tab {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.room-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Checklist body */
+.checklist-body { padding: 1rem; }
+.room-photo {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  margin-bottom: 1rem;
+  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.room-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 3px;
+}
+.checklist-items { display: flex; flex-direction: column; gap: 0; }
+.checklist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.checklist-item:last-child { border-bottom: none; }
+.check-box {
+  width: 22px; height: 22px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  transition: all 0.15s;
+}
+.checklist-item.done .check-box {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+.check-label {
+  font-size: 0.85rem;
+  flex: 1;
+}
+.checklist-item.done .check-label {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+/* Completion screen */
+.complete-screen {
+  display: none;
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+.complete-icon { font-size: 3.5rem; margin-bottom: 1rem; }
+.complete-title {
+  font-family: 'Fraunces', serif;
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.complete-sub { color: var(--muted); font-size: 0.8rem; margin-bottom: 2rem; }
 </style>
 </head>
 <body>
+<!-- Checklist screen (full-screen overlay) -->
+<div class="checklist-screen" id="checklist-screen">
+  <div class="checklist-header">
+    <div class="checklist-header-top">
+      <button class="back-btn" onclick="closeChecklist()">← Back</button>
+      <div>
+        <div class="checklist-title" id="cl-title">Unit C</div>
+        <div class="checklist-subtitle" id="cl-date"></div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);" id="cl-progress-text">0 / 0</div>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="cl-progress-bar" style="width:0%"></div>
+    </div>
+    <div class="room-tabs" id="cl-room-tabs"></div>
+  </div>
+
+  <div class="checklist-body" id="cl-body">
+    <!-- room content injected here -->
+  </div>
+
+  <!-- Completion screen shown inside checklist -->
+  <div class="complete-screen" id="complete-screen">
+    <div class="complete-icon">✅</div>
+    <div class="complete-title">All done!</div>
+    <div class="complete-sub" id="complete-sub">Unit C is clean and ready for check-in.</div>
+    <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;" onclick="notifyOwner()" id="notify-btn">
+      Notify Satoru — Unit Ready
+    </button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:0.75rem;font-size:0.8rem;" onclick="closeChecklist()">Back to schedule</button>
+  </div>
+</div>
+
 <div class="container">
   <header>
-    <h1>Bau Guesthaus<br><span>Cleaning Scheduler</span></h1>
-    <p class="subtitle">Claim your cleaning slots for the next 14 days</p>
+    <h1>Bau Guesthaus<br><span>Cleaning</span></h1>
   </header>
-
 
   <!-- Login -->
   <div id="login-card" class="card" style="display:none;">
@@ -241,12 +497,25 @@ h1 span { font-style: italic; color: var(--accent); }
   <div id="app">
     <!-- Cleaner view -->
     <div id="cleaner-view">
-      <div class="legend">
-        <div class="legend-item"><div class="legend-dot" style="background:var(--unclaimed);border:1px solid #e0c060;"></div> Available</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> Your claim</div>
+
+      <!-- Home tab -->
+      <div id="tab-home">
+        <div id="next-clean-area"></div>
+        <div class="card" style="margin-top:0.5rem;">
+          <div class="card-title">Your upcoming cleans</div>
+          <div id="my-claims-list" style="font-size:0.82rem;color:var(--muted);">Loading...</div>
+        </div>
       </div>
-      <div id="schedule-loading" class="loading"><span class="spinner"></span>Loading schedule...</div>
-      <div id="schedule-container"></div>
+
+      <!-- Schedule tab -->
+      <div id="tab-schedule" style="display:none;">
+        <div class="legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--unclaimed);border:1px solid #e0c060;"></div> Available</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> Your claim</div>
+        </div>
+        <div id="schedule-loading" class="loading"><span class="spinner"></span>Loading schedule...</div>
+        <div id="schedule-container"></div>
+      </div>
     </div>
 
     <!-- Admin view -->
@@ -279,6 +548,16 @@ h1 span { font-style: italic; color: var(--accent); }
     </div>
   </div>
 </div>
+
+<!-- Bottom nav (cleaner only) -->
+<nav class="bottom-nav" id="bottom-nav" style="display:none;">
+  <button class="nav-btn active" id="nav-home" onclick="switchTab('home')">
+    <span class="nav-icon">🏠</span>Home
+  </button>
+  <button class="nav-btn" id="nav-schedule" onclick="switchTab('schedule')">
+    <span class="nav-icon">📅</span>Schedule
+  </button>
+</nav>
 
 <script type="module">
 // ── Firebase config ───────────────────────────────────────
@@ -365,11 +644,14 @@ function showApp() {
   if (currentUser.role === 'admin') {
     document.getElementById('cleaner-view').style.display = 'none';
     document.getElementById('admin-view').style.display = 'block';
+    document.getElementById('bottom-nav').style.display = 'none';
     loadAdminSchedule();
     loadCleanersList();
   } else {
     document.getElementById('cleaner-view').style.display = 'block';
     document.getElementById('admin-view').style.display = 'none';
+    document.getElementById('bottom-nav').style.display = 'flex';
+    switchTab('home');
     loadCleanerSchedule();
   }
 }
@@ -501,6 +783,7 @@ async function loadCleanerSchedule() {
     const claims = {};
     snap.forEach(d => { claims[d.id] = d.data(); });
     renderCleanerSchedule(slots, claims, container);
+    renderHomeTab(slots, claims);
   });
 }
 
@@ -713,6 +996,216 @@ window.addCleaner = async function() {
 window.removeCleaner = async function(id) {
   const { doc, deleteDoc } = window._fb;
   await deleteDoc(doc(db, 'cleaners', id));
+};
+
+// ── Bottom nav / tabs ─────────────────────────────────────
+window.switchTab = function(tab) {
+  document.getElementById('tab-home').style.display = tab === 'home' ? 'block' : 'none';
+  document.getElementById('tab-schedule').style.display = tab === 'schedule' ? 'block' : 'none';
+  document.getElementById('nav-home').classList.toggle('active', tab === 'home');
+  document.getElementById('nav-schedule').classList.toggle('active', tab === 'schedule');
+};
+
+// ── Home tab: next clean & my claims ──────────────────────
+function renderHomeTab(slots, claims) {
+  const mySlots = [];
+  for (const { day, checkouts } of slots) {
+    for (const { unit, nights } of checkouts) {
+      const key = slotKey(day, unit);
+      if (claims[key] && claims[key].cleaner === currentUser.name) {
+        mySlots.push({ day, unit, nights, key });
+      }
+    }
+  }
+
+  // Next clean banner
+  const area = document.getElementById('next-clean-area');
+  area.innerHTML = '';
+  if (mySlots.length === 0) {
+    area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">No upcoming cleans claimed yet. Go to Schedule to claim a slot.</div></div>`;
+  } else {
+    const { day, unit, nights } = mySlots[0];
+    const isToday = sameDay(day, new Date());
+    const dateLabel = isToday ? 'Today' : formatDay(day);
+    const nightLabel = nights ? ` · ${nights} night${nights===1?'':'s'}` : '';
+    area.innerHTML = `
+      <div class="next-clean-card">
+        <div class="next-clean-label">Your next clean</div>
+        <div class="next-clean-date">${dateLabel}</div>
+        <div class="next-clean-unit">Unit ${unit}${nightLabel}</div>
+        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">
+          Open cleaning checklist →
+        </button>
+      </div>`;
+  }
+
+  // My claims list
+  const list = document.getElementById('my-claims-list');
+  if (mySlots.length === 0) {
+    list.textContent = 'None claimed yet.';
+    return;
+  }
+  list.innerHTML = '';
+  for (const { day, unit, nights } of mySlots) {
+    const isToday = sameDay(day, new Date());
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);';
+    const dateLabel = isToday ? '<span style="color:var(--accent);font-weight:500;">Today</span>' : formatDay(day);
+    const nightLabel = nights ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
+    row.innerHTML = `<span>${dateLabel} — Unit ${unit}${nightLabel}</span>
+      <button style="font-family:\'DM Mono\',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">Checklist</button>`;
+    list.appendChild(row);
+  }
+}
+
+// ── Per-unit cleaning checklists ──────────────────────────
+const UNIT_CHECKLISTS = {
+  A: {
+    rooms: [
+      { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge'] },
+      { name: 'Bathroom', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower/tub', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
+      { name: 'Bedroom', photo: null, items: ['Strip & remake bed with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close all closets'] },
+      { name: 'Living Room', photo: null, items: ['Vacuum sofa & cushions', 'Wipe coffee table', 'Check for forgotten items', 'Straighten décor'] },
+      { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off all lights', 'Set thermostat', 'Take out trash bags', 'Lock door & return key'] },
+    ]
+  },
+  B: {
+    rooms: [
+      { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge'] },
+      { name: 'Bathroom', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
+      { name: 'Bedroom', photo: null, items: ['Strip & remake bed', 'Dust surfaces', 'Vacuum floor', 'Check under bed'] },
+      { name: 'Living Room', photo: null, items: ['Vacuum sofa', 'Wipe table', 'Check for forgotten items'] },
+      { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off lights', 'Set thermostat', 'Take out trash', 'Lock door'] },
+    ]
+  },
+  C: {
+    rooms: [
+      { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge', 'Wipe exterior of fridge'] },
+      { name: 'Bathroom 1', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
+      { name: 'Bedroom 1', photo: null, items: ['Strip & remake bed (queen)', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close closets'] },
+      { name: 'Bedroom 2', photo: null, items: ['Strip & remake bed (twin x2)', 'Dust surfaces', 'Vacuum floor'] },
+      { name: 'Living Room', photo: null, items: ['Vacuum sofa & cushions', 'Wipe coffee table & TV stand', 'Check for forgotten items', 'Straighten décor'] },
+      { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off all lights', 'Set thermostat', 'Take out trash bags', 'Lock door & return key'] },
+    ]
+  },
+  E: {
+    rooms: [
+      { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock supplies', 'Clean microwave inside'] },
+      { name: 'Bathroom 1', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower/tub', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
+      { name: 'Bathroom 2', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
+      { name: 'Bedroom 1', photo: null, items: ['Strip & remake bed (king)', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close closets'] },
+      { name: 'Bedroom 2', photo: null, items: ['Strip & remake bed', 'Dust surfaces', 'Vacuum floor'] },
+      { name: 'Living Room', photo: null, items: ['Vacuum all furniture', 'Wipe coffee table', 'Check for forgotten items', 'Straighten décor', 'Check balcony'] },
+      { name: 'Final Check', photo: null, items: ['Lock windows & balcony door', 'Turn off all lights & fans', 'Set thermostat', 'Take out all trash', 'Lock door & return key'] },
+    ]
+  },
+  F: {
+    rooms: [
+      { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge'] },
+      { name: 'Bathroom', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
+      { name: 'Bedroom', photo: null, items: ['Strip & remake bed', 'Dust surfaces', 'Vacuum floor', 'Check under bed'] },
+      { name: 'Living Room', photo: null, items: ['Vacuum sofa', 'Wipe table', 'Check for forgotten items', 'Straighten décor'] },
+      { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off lights', 'Set thermostat', 'Take out trash', 'Lock door'] },
+    ]
+  }
+};
+
+// owner phone number for SMS
+const OWNER_PHONE = '8456168631';
+
+// Checklist state
+let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {} };
+
+window.openChecklist = function(unit, date, nights) {
+  clState = { unit, date, nights: parseInt(nights)||0, roomIndex: 0, checked: {} };
+  document.getElementById('cl-title').textContent = `Unit ${unit}`;
+  document.getElementById('cl-date').textContent = date + (clState.nights ? ` · ${clState.nights} night${clState.nights===1?'':'s'}` : '');
+  document.getElementById('complete-screen').style.display = 'none';
+  document.getElementById('cl-body').style.display = 'block';
+  buildRoomTabs(unit);
+  renderRoom(unit, 0);
+  document.getElementById('checklist-screen').style.display = 'block';
+  window.scrollTo(0,0);
+};
+
+window.closeChecklist = function() {
+  document.getElementById('checklist-screen').style.display = 'none';
+};
+
+function buildRoomTabs(unit) {
+  const rooms = (UNIT_CHECKLISTS[unit] || UNIT_CHECKLISTS.A).rooms;
+  const wrap = document.getElementById('cl-room-tabs');
+  wrap.innerHTML = '';
+  rooms.forEach((r, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'room-tab' + (i===0?' active':'');
+    btn.textContent = r.name;
+    btn.onclick = () => { clState.roomIndex = i; renderRoom(unit, i); };
+    wrap.appendChild(btn);
+  });
+}
+
+function renderRoom(unit, idx) {
+  // Update tab active state
+  document.querySelectorAll('.room-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
+
+  const rooms = (UNIT_CHECKLISTS[unit] || UNIT_CHECKLISTS.A).rooms;
+  const room = rooms[idx];
+  const body = document.getElementById('cl-body');
+
+  // Photo area
+  const photoHtml = room.photo
+    ? `<div class="room-photo"><img src="${room.photo}" alt="${room.name}"></div>`
+    : `<div class="room-photo" style="display:flex;align-items:center;justify-content:center;min-height:180px;">
+         <span style="color:var(--muted);font-size:0.78rem;">📷 Photo coming soon</span>
+       </div>`;
+
+  // Checklist items
+  const itemsHtml = room.items.map((item, j) => {
+    const ck = clState.checked[`${idx}-${j}`];
+    return `<div class="checklist-item ${ck?'done':''}" onclick="toggleCheck(${idx},${j})">
+      <div class="check-box">${ck?'✓':''}</div>
+      <span class="check-label">${item}</span>
+    </div>`;
+  }).join('');
+
+  body.innerHTML = `${photoHtml}<div class="checklist-items">${itemsHtml}</div>`;
+  updateProgress(unit);
+}
+
+window.toggleCheck = function(roomIdx, itemIdx) {
+  const key = `${roomIdx}-${itemIdx}`;
+  clState.checked[key] = !clState.checked[key];
+  renderRoom(clState.unit, roomIdx);
+};
+
+function updateProgress(unit) {
+  const rooms = (UNIT_CHECKLISTS[unit] || UNIT_CHECKLISTS.A).rooms;
+  let total = 0, done = 0;
+  rooms.forEach((r, ri) => {
+    r.items.forEach((_, ji) => {
+      total++;
+      if (clState.checked[`${ri}-${ji}`]) done++;
+    });
+  });
+  const pct = total > 0 ? Math.round(done/total*100) : 0;
+  document.getElementById('cl-progress-bar').style.width = pct + '%';
+  document.getElementById('cl-progress-text').textContent = `${done} / ${total}`;
+
+  if (done === total && total > 0) {
+    setTimeout(() => {
+      document.getElementById('cl-body').style.display = 'none';
+      const sub = document.getElementById('complete-sub');
+      sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.`;
+      document.getElementById('notify-btn').textContent = `Notify Satoru — Unit ${clState.unit} Ready`;
+      document.getElementById('complete-screen').style.display = 'block';
+    }, 400);
+  }
+}
+
+window.notifyOwner = function() {
+  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
+  window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
 };
 
 // ── Init ─────────────────────────────────────────────────
