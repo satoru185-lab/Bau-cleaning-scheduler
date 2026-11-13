@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Bau Cleaning">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Bau Cleaning">
 <title>Bau Guesthaus — Cleaning Scheduler</title>
@@ -288,7 +291,7 @@ const FIREBASE_CONFIG = {
   appId: "1:899961946120:web:c08c59b29be4d9d42911bd"
 };
 
-const ADMIN_PIN = '7553';
+const ADMIN_PINS = { '7553': 'Satoru', '1225': 'Atsuko' };
 
 let db, currentUser = null;
 
@@ -325,8 +328,8 @@ window.login = async function() {
   if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
 
   // Admin check
-  if (pin === ADMIN_PIN) {
-    currentUser = { name, role: 'admin' };
+  if (ADMIN_PINS[pin]) {
+    currentUser = { name: ADMIN_PINS[pin], role: 'admin' };
     showApp();
     return;
   }
