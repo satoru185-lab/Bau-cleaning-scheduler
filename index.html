@@ -483,7 +483,7 @@ body { padding-bottom: 5rem; }
       <button class="star-btn" onclick="selectRating(5)" data-star="5">★</button>
     </div>
     <div id="rating-note" style="font-size:0.78rem;color:var(--accent);min-height:1.4rem;margin-bottom:1.25rem;text-align:center;"></div>
-    <button class="btn btn-green" id="start-checklist-btn" style="width:100%;font-size:0.9rem;padding:0.75rem;opacity:0.4;pointer-events:none;" onclick="startChecklistAfterRating()">Start Cleaning →</button>
+    <button class="btn btn-green" id="start-checklist-btn" style="width:100%;font-size:0.9rem;padding:0.75rem;opacity:0.4;pointer-events:none;" onclick="startChecklistAfterRating()">Text Satoru &amp; Start Cleaning →</button>
   </div>
 
   <!-- Completion screen shown inside checklist -->
@@ -1523,10 +1523,21 @@ window.selectRating = function(stars) {
 };
 
 window.startChecklistAfterRating = function() {
-  document.getElementById('rating-screen').style.display = 'none';
-  document.getElementById('cl-body').style.display = 'block';
-  buildRoomTabs(clState.unit);
-  renderRoom(clState.unit, 0);
+  // Send arrival SMS to Satoru before starting
+  const stars = clState.guestRating;
+  const starStr = '⭐'.repeat(stars) + (stars < 5 ? ` (${stars}/5)` : '');
+  const dateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  const msg = encodeURIComponent(`🧹 ${currentUser.name} is starting Unit ${clState.unit} (${dateLabel}) · Guest cleanliness: ${starStr}`);
+  window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
+
+  // After SMS app opens, returning to the app will show the checklist
+  // We set a small timeout so the SMS deeplink fires before we update the DOM
+  setTimeout(() => {
+    document.getElementById('rating-screen').style.display = 'none';
+    document.getElementById('cl-body').style.display = 'block';
+    buildRoomTabs(clState.unit);
+    renderRoom(clState.unit, 0);
+  }, 300);
 };
 
 window.closeChecklist = function() {
