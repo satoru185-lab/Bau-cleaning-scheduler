@@ -872,16 +872,31 @@ async function loadCleanerSchedule() {
   loading.style.display = 'none';
 
   const { collection, onSnapshot } = window._fb;
+  let latestClaims = {};
+  let completedKeys = new Set();
+
+  // Listen for real-time history updates (completed cleans)
+  onSnapshot(collection(db, 'history'), histSnap => {
+    completedKeys = new Set();
+    histSnap.forEach(d => {
+      if (d.data().cleaner === currentUser.name) completedKeys.add(d.id);
+    });
+    renderCleanerSchedule(slots, latestClaims, container, completedKeys);
+    renderHomeTab(slots, latestClaims);
+    // Also refresh the Past Cleans list
+    loadMyHistory();
+  });
+
   // Listen for real-time claim updates
   onSnapshot(collection(db, 'claims'), snap => {
-    const claims = {};
-    snap.forEach(d => { claims[d.id] = d.data(); });
-    renderCleanerSchedule(slots, claims, container);
-    renderHomeTab(slots, claims);
+    latestClaims = {};
+    snap.forEach(d => { latestClaims[d.id] = d.data(); });
+    renderCleanerSchedule(slots, latestClaims, container, completedKeys);
+    renderHomeTab(slots, latestClaims);
   });
 }
 
-function renderCleanerSchedule(slots, claims, container) {
+function renderCleanerSchedule(slots, claims, container, completedKeys = new Set()) {
   container.innerHTML = '';
   for (const { day, checkouts } of slots) {
     // Only show slots that are unclaimed or claimed by me
@@ -904,22 +919,29 @@ function renderCleanerSchedule(slots, claims, container) {
 
       for (const {unit, nights} of visibleSlots) {
         const key = slotKey(day, unit);
+        const histKey = `${dayKey(day)}_${unit}`;
         const ciKey = `${dayKey(day)}_${unit}_ci`;
         const claim = claims[key];
         const isMe = claim && claim.cleaner === currentUser.name;
+        const isDone = completedKeys.has(histKey);
         const nightLabel = nights ? `${nights} night${nights===1?'':'s'}` : '';
         const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
 
         const slotEl = document.createElement('div');
-        slotEl.className = `slot ${isMe ? 'claimed-mine' : 'unclaimed'}`;
+        slotEl.className = `slot ${isDone ? 'claimed-mine' : isMe ? 'claimed-mine' : 'unclaimed'}`;
 
-        let rightSide = isMe
-          ? `<span class="slot-claimer mine">✓ Claimed</span>
-             <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`
-          : `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
+        let rightSide;
+        if (isDone) {
+          rightSide = `<span class="slot-claimer mine" style="font-size:1.1rem;">✅ Done</span>`;
+        } else if (isMe) {
+          rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
+             <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
+        } else {
+          rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
+        }
 
         slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-          <span class="slot-label">${nightLabel}${isMe ? ` · Done by ${doneBy}` : ''}</span>
+          <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · Done by ${doneBy}` : ''}</span>
           ${rightSide}`;
         slotsDiv.appendChild(slotEl);
       }
@@ -1699,9 +1721,7 @@ function updateProgress(unit) {
     setTimeout(() => {
       document.getElementById('cl-body').style.display = 'none';
       const sub = document.getElementById('complete-sub');
-      const stars = clState.guestRating;
-      const starStr = stars ? (' · Guest: ' + '⭐'.repeat(stars) + (stars < 5 ? ` (${stars}/5)` : '')) : '';
-      sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.${starStr}`;
+      sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.`;
       document.getElementById('notify-btn').textContent = `Notify Satoru — Unit ${clState.unit} Ready`;
       document.getElementById('complete-screen').style.display = 'block';
     }, 400);
@@ -1724,10 +1744,19 @@ window.notifyOwner = async function() {
     });
   } catch(e) { console.error('History write failed:', e); }
 
-  const stars = clState.guestRating;
-  const ratingStr = stars ? ` · Guest cleanliness: ${'⭐'.repeat(stars)}${stars < 5 ? ` (${stars}/5)` : ''}` : '';
-  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})${ratingStr}`);
+  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
+
+  // After SMS opens, return to home tab and refresh history
+  setTimeout(() => {
+    // Hide checklist, show main cleaner screen
+    document.getElementById('checklist-screen').style.display = 'none';
+    document.getElementById('cleaner-screen').style.display = 'block';
+    // Refresh Past Cleans list (onSnapshot will also catch this, belt+suspenders)
+    loadMyHistory();
+    // Switch to home tab so cleaner sees updated state
+    if (typeof switchTab === 'function') switchTab('home');
+  }, 500);
 };
 
 // ── Admin History ─────────────────────────────────────────
@@ -1775,17 +1804,13 @@ async function loadAdminHistory() {
         ? new Date(r.completedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })
         : '';
 
-      const ratingHtml = r.guestRating
-        ? `<span style="font-size:0.85rem;margin-left:0.4rem;" title="Guest cleanliness">${'⭐'.repeat(r.guestRating)}</span>`
-        : '';
-
       const row = document.createElement('div');
       row.className = 'card';
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;margin-bottom:0.4rem;';
       row.innerHTML = `
         <div>
           <div style="font-size:0.85rem;font-weight:500;">${dateStr} — Unit ${r.unit}${nightLabel}</div>
-          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">Cleaned by ${r.cleaner}${completedStr ? ' · Done at ' + completedStr : ''}${ratingHtml}</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">Cleaned by ${r.cleaner}${completedStr ? ' · Done at ' + completedStr : ''}</div>
         </div>
         <span style="font-size:1.1rem;">✅</span>`;
       block.appendChild(row);
