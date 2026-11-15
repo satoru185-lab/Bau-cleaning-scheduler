@@ -1040,11 +1040,13 @@ function showCalendarPrompt() {
   prompt.id = 'cal-prompt';
   // Full-screen dark overlay
   prompt.style.cssText = `
-    position:fixed;inset:0;
-    background:rgba(0,0,0,0.6);
-    z-index:999;
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.65);
+    z-index:9999;
     display:flex;align-items:center;justify-content:center;
     padding:1.5rem;
+    -webkit-backdrop-filter:blur(2px);
+    backdrop-filter:blur(2px);
   `;
   prompt.innerHTML = `
     <div style="background:var(--card);border-radius:16px;padding:1.5rem 1.5rem 1.25rem;width:100%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,0.35);">
