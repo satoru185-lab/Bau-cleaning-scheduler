@@ -1268,7 +1268,7 @@ function renderAdminSchedule(slots, claims, container, completedKeys = new Set()
         if (isDone) {
           assignHtml = `<div style="margin-top:0.35rem;">
             <span style="color:#1a4a30;font-size:0.72rem;font-weight:600;">✅ Clean &amp; Ready</span>
-            ${claim ? `<span style="color:#2a6b4a;font-size:0.65rem;"> · ${claim.cleaner}</span>` : ''}
+            ${claim ? `<span style="color:#2a6b4a;font-size:0.82rem;font-weight:700;"> · ${claim.cleaner}</span>` : ''}
           </div>`;
         } else {
           const options = adminCleanerNames.map(n =>
@@ -1276,7 +1276,7 @@ function renderAdminSchedule(slots, claims, container, completedKeys = new Set()
           ).join('');
           assignHtml = claim
             ? `<div style="margin-top:0.35rem;display:flex;align-items:center;gap:0.3rem;">
-                 <span style="color:var(--green);font-size:0.7rem;">✓ ${claim.cleaner}</span>
+                 <span style="color:var(--green);font-size:0.82rem;font-weight:700;">✓ ${claim.cleaner}</span>
                  <button onclick="adminRemove('${key}')" style="font-size:0.6rem;color:var(--accent);border:none;background:none;cursor:pointer;padding:0;">✕</button>
                </div>`
             : adminCleanerNames.length > 0
