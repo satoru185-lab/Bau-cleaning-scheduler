@@ -989,13 +989,14 @@ function makeICS(slots) {
   ].join('\r\n');
 }
 
-function openAppleCal() {
+async function openAppleCal() {
   const ics = makeICS(pendingCalendarSlots);
-  const b64 = btoa(unescape(encodeURIComponent(ics)));
-  // Navigate current window to Worker URL — no popup blocker, iOS will prompt "Allow download?"
-  // then offer to open the .ics in Calendar. History.back() returns them to the app.
+  // Store ICS in Firestore with a random short key, then navigate to Worker with just that key
+  const { doc, setDoc } = window._fb;
+  const key = Math.random().toString(36).slice(2, 8);
+  await setDoc(doc(db, 'ics_temp', key), { ics, created: Date.now() });
   dismissCalendarPrompt();
-  window.location.href = 'https://bau-cal.hstksdrsk7.workers.dev/?ics=' + encodeURIComponent(b64);
+  window.location.href = 'https://bau-cal.hstksdrsk7.workers.dev/?key=' + key;
 }
 
 function googleCalLinkSingle(date, unit) {
