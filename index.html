@@ -1038,32 +1038,32 @@ function showCalendarPrompt() {
   // Compact sticky bar at bottom — no overlay, schedule fully scrollable
   prompt.style.cssText = `
     position:fixed;bottom:0;left:0;right:0;
-    background:var(--card);
-    border-top:2px solid var(--green);
-    box-shadow:0 -2px 12px rgba(0,0,0,0.14);
+    background:#ffffff;
+    border-top:2px solid #3a7d5a;
+    box-shadow:0 -4px 16px rgba(0,0,0,0.22);
     z-index:9999;
-    padding:0.5rem 0.9rem 1rem;
+    padding:0.6rem 0.9rem 1.2rem;
   `;
   prompt.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
       <div style="min-width:0;">
-        <div style="font-weight:600;font-size:0.8rem;white-space:nowrap;">📅 ${count} slot${count>1?'s':''} claimed · Add to calendar?</div>
-        <div style="font-size:0.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${pendingCalendarSlots.map(s=>s.unit+' '+new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})).join(' · ')}</div>
+        <div style="font-weight:600;font-size:0.8rem;white-space:nowrap;color:#111111;">📅 ${count} slot${count>1?'s':''} claimed · Add to calendar?</div>
+        <div style="font-size:0.7rem;color:#555555;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${pendingCalendarSlots.map(s=>s.unit+' '+new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})).join(' · ')}</div>
       </div>
       <button onclick="dismissCalendarPrompt()"
-        style="background:none;border:none;font-size:1.1rem;color:var(--muted);cursor:pointer;padding:0;flex-shrink:0;">✕</button>
+        style="background:none;border:none;font-size:1.1rem;color:#555555;cursor:pointer;padding:0;flex-shrink:0;">✕</button>
     </div>
     <div style="display:flex;gap:0.4rem;margin-top:0.45rem;">
       <a id="ics-link" href="${icsDataUri}" download="bau-cleaning-schedule.ics"
-        style="flex:1;display:flex;align-items:center;justify-content:center;padding:0.55rem 0.4rem;border-radius:8px;background:var(--green);color:white;font-size:0.78rem;font-weight:600;text-decoration:none;box-sizing:border-box;">
+        style="flex:1;display:flex;align-items:center;justify-content:center;padding:0.55rem 0.4rem;border-radius:8px;background:#3a7d5a;color:#ffffff;font-size:0.78rem;font-weight:600;text-decoration:none;box-sizing:border-box;">
         🍎 Apple Calendar
       </a>
       <button onclick="openAllGoogleCal()"
-        style="flex:1;padding:0.55rem 0.4rem;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text);">
+        style="flex:1;padding:0.55rem 0.4rem;border-radius:8px;border:1px solid #cccccc;background:#f5f5f5;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;color:#111111;">
         🗓 Google Calendar
       </button>
       <button onclick="dismissCalendarPrompt()"
-        style="padding:0.55rem 0.6rem;border-radius:8px;border:1px solid var(--border);background:none;font-size:0.72rem;color:var(--muted);cursor:pointer;font-family:inherit;">
+        style="padding:0.55rem 0.6rem;border-radius:8px;border:1px solid #cccccc;background:#f5f5f5;font-size:0.72rem;color:#555555;cursor:pointer;font-family:inherit;">
         Skip
       </button>
     </div>
