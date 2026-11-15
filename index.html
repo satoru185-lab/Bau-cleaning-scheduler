@@ -675,6 +675,7 @@ window.login = async function() {
 
 window.logout = function() {
   currentUser = null;
+  dismissCalendarPrompt();
   document.getElementById('user-bar').style.display = 'none';
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-card').style.display = 'block';
@@ -951,6 +952,127 @@ function renderCleanerSchedule(slots, claims, container, completedKeys = new Set
   }
 }
 
+// ── Calendar helpers ─────────────────────────────────────
+// ── Calendar helpers ─────────────────────────────────────
+// Queue of claimed slots waiting to be added to calendar
+let pendingCalendarSlots = []; // [{date, unit}, ...]
+let calendarPromptTimer = null;
+
+// Format a date+time as local iCal datetime string (no Z — local time)
+function toICSLocal(date, hour) {
+  // date = 'YYYY-MM-DD', hour = 11 or 16
+  const d = date.replace(/-/g,'');
+  const h = String(hour).padStart(2,'0');
+  return `${d}T${h}0000`;
+}
+
+function makeICS(slots) {
+  // slots = [{date, unit}, ...] — one VEVENT per slot, 11am–4pm local time
+  const now = new Date().toISOString().replace(/[-:.]/g,'').slice(0,15) + 'Z';
+  const events = slots.map(({date, unit}) => [
+    'BEGIN:VEVENT',
+    `UID:bau-${date}-${unit}@bauguesthaus`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${toICSLocal(date, 11)}`,
+    `DTEND:${toICSLocal(date, 16)}`,
+    `SUMMARY:🧹 Clean Unit ${unit}`,
+    `DESCRIPTION:Cleaning job at Bau Guesthaus — Unit ${unit}`,
+    'END:VEVENT'
+  ].join('\r\n')).join('\r\n');
+
+  return [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Bau Guesthaus//Cleaning Scheduler//EN',
+    events,
+    'END:VCALENDAR'
+  ].join('\r\n');
+}
+
+function downloadICSAll() {
+  const ics = makeICS(pendingCalendarSlots);
+  const blob = new Blob([ics], { type: 'text/calendar' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `bau-cleaning-schedule.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  dismissCalendarPrompt();
+}
+
+function googleCalLinkSingle(date, unit) {
+  // Google Calendar only supports one event per link, so open one tab per slot
+  const start = toICSLocal(date, 11);
+  const end   = toICSLocal(date, 16);
+  const title = encodeURIComponent(`🧹 Clean Unit ${unit}`);
+  const details = encodeURIComponent(`Cleaning job at Bau Guesthaus — Unit ${unit}`);
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${start}/${end}&details=${details}`;
+}
+
+function openAllGoogleCal() {
+  pendingCalendarSlots.forEach(({date, unit}) => {
+    window.open(googleCalLinkSingle(date, unit), '_blank');
+  });
+  dismissCalendarPrompt();
+}
+
+function dismissCalendarPrompt() {
+  const el = document.getElementById('cal-prompt');
+  if (el) el.remove();
+  pendingCalendarSlots = [];
+  if (calendarPromptTimer) { clearTimeout(calendarPromptTimer); calendarPromptTimer = null; }
+}
+
+function showCalendarPrompt() {
+  const existing = document.getElementById('cal-prompt');
+  if (existing) existing.remove();
+  if (calendarPromptTimer) clearTimeout(calendarPromptTimer);
+
+  const count = pendingCalendarSlots.length;
+  const listHtml = pendingCalendarSlots.map(({date, unit}) => {
+    const label = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    return `<div style="font-size:0.78rem;color:var(--muted);">Unit ${unit} · ${label}</div>`;
+  }).join('');
+
+  const prompt = document.createElement('div');
+  prompt.id = 'cal-prompt';
+  prompt.style.cssText = `
+    position:fixed;bottom:0;left:0;right:0;
+    background:var(--card);border-top:2px solid var(--green);
+    padding:1rem 1.25rem 1.5rem;z-index:999;
+    box-shadow:0 -4px 20px rgba(0,0,0,0.12);
+  `;
+  prompt.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.6rem;">
+      <div>
+        <div style="font-weight:600;font-size:0.95rem;">✅ ${count} slot${count>1?'s':''} claimed · Add to calendar?</div>
+        <div style="margin-top:0.3rem;">${listHtml}</div>
+      </div>
+      <button onclick="dismissCalendarPrompt()"
+        style="background:none;border:none;font-size:1.3rem;color:var(--muted);cursor:pointer;padding:0.25rem;flex-shrink:0;">✕</button>
+    </div>
+    <div style="display:flex;gap:0.6rem;margin-top:0.75rem;">
+      <button onclick="downloadICSAll()"
+        style="flex:1;padding:0.65rem;border-radius:8px;border:1px solid var(--border);background:white;font-size:0.82rem;cursor:pointer;font-family:inherit;">
+        🍎 Apple Calendar
+      </button>
+      <button onclick="openAllGoogleCal()"
+        style="flex:1;padding:0.65rem;border-radius:8px;border:1px solid var(--border);background:white;font-size:0.82rem;cursor:pointer;font-family:inherit;">
+        🗓 Google Calendar
+      </button>
+    </div>
+    <div style="text-align:center;margin-top:0.6rem;">
+      <button onclick="dismissCalendarPrompt()" style="background:none;border:none;font-size:0.75rem;color:var(--muted);cursor:pointer;text-decoration:underline;">
+        Skip — don't add to calendar
+      </button>
+    </div>
+  `;
+  document.body.appendChild(prompt);
+  // Auto-dismiss after 30 seconds
+  calendarPromptTimer = setTimeout(dismissCalendarPrompt, 30000);
+}
+
 window.claimSlot = async function(key, date, unit) {
   const { doc, setDoc } = window._fb;
   await setDoc(doc(db, 'claims', key), {
@@ -971,6 +1093,9 @@ window.claimSlot = async function(key, date, unit) {
       body: `${currentUser.name} claimed Unit ${unit} on ${dateLabel}`
     });
   } catch(e) { /* silent — don't block the claim if notification fails */ }
+  // Queue this slot and show/refresh the calendar prompt
+  pendingCalendarSlots.push({ date, unit });
+  showCalendarPrompt();
 };
 
 window.unclaim = async function(key) {
