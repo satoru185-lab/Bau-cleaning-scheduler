@@ -992,19 +992,10 @@ function makeICS(slots) {
 function openAppleCal() {
   const ics = makeICS(pendingCalendarSlots);
   const b64 = btoa(unescape(encodeURIComponent(ics)));
-  // Submit a hidden form via POST — bypasses URL length limits and iOS popup blockers
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = 'https://bau-cal.hstksdrsk7.workers.dev/';
-  form.target = '_blank';
-  const input = document.createElement('input');
-  input.type = 'hidden';
-  input.name = 'ics';
-  input.value = b64;
-  form.appendChild(input);
-  document.body.appendChild(form);
-  form.submit();
-  setTimeout(() => { form.remove(); dismissCalendarPrompt(); }, 500);
+  // Navigate current window to Worker URL — no popup blocker, iOS will prompt "Allow download?"
+  // then offer to open the .ics in Calendar. History.back() returns them to the app.
+  dismissCalendarPrompt();
+  window.location.href = 'https://bau-cal.hstksdrsk7.workers.dev/?ics=' + encodeURIComponent(b64);
 }
 
 function googleCalLinkSingle(date, unit) {
