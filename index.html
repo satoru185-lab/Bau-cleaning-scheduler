@@ -1003,10 +1003,19 @@ async function loadAdminSchedule() {
     snap.forEach(d => adminCleanerNames.push(d.data().name));
   });
 
+  let latestAdminClaims = {};
+  let adminCompletedKeys = new Set();
+
+  onSnapshot(collection(db, 'history'), histSnap => {
+    adminCompletedKeys = new Set();
+    histSnap.forEach(d => { adminCompletedKeys.add(d.id); });
+    renderAdminSchedule(adminFullSlots, latestAdminClaims, container, adminCompletedKeys);
+  });
+
   onSnapshot(collection(db, 'claims'), snap => {
-    const claims = {};
-    snap.forEach(d => { claims[d.id] = d.data(); });
-    renderAdminSchedule(adminFullSlots, claims, container);
+    latestAdminClaims = {};
+    snap.forEach(d => { latestAdminClaims[d.id] = d.data(); });
+    renderAdminSchedule(adminFullSlots, latestAdminClaims, container, adminCompletedKeys);
   });
 }
 
@@ -1020,14 +1029,18 @@ const STATUS_CONFIG = {
   unavailable: { label: 'N/A (Unit E)',   bg: '#f0ece4', border: '#c8b89a', color: '#a08060' },
 };
 
-function renderAdminSchedule(slots, claims, container) {
+function renderAdminSchedule(slots, claims, container, completedKeys = new Set()) {
   container.innerHTML = '';
 
   // Summary counts
-  let totalCheckouts = 0, claimedCount = 0;
-  for (const { unitRows } of slots) {
-    for (const { status } of unitRows) {
-      if (status === 'checkout' || status === 'both') totalCheckouts++;
+  let totalCheckouts = 0, claimedCount = 0, doneCount = 0;
+  for (const { day, unitRows } of slots) {
+    for (const { unit, status } of unitRows) {
+      if (status === 'checkout' || status === 'both') {
+        totalCheckouts++;
+        const histKey = `${dayKey(day)}_${unit}`;
+        if (completedKeys.has(histKey)) doneCount++;
+      }
     }
   }
   for (const k of Object.keys(claims)) claimedCount++;
@@ -1036,7 +1049,8 @@ function renderAdminSchedule(slots, claims, container) {
   summary.className = 'card';
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
-      <span style="color:var(--green);">✓ ${claimedCount} cleaners assigned</span>
+      <span style="color:var(--green);">✅ ${doneCount} units ready for check-in</span>
+      <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount} cleaners assigned</span>
       <span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} checkouts uncovered</span>
     </div>
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;">
@@ -1066,12 +1080,16 @@ function renderAdminSchedule(slots, claims, container) {
       const isCheckout = status === 'checkout' || status === 'both';
       const isCheckin  = status === 'checkin'  || status === 'both';
       const key = slotKey(day, unit);
+      const histKey = `${dayKey(day)}_${unit}`;
       const ciKey = `${dayKey(day)}_${unit}_ci`; // separate key for checkin time
       const claim = claims[key];
+      const isDone = completedKeys.has(histKey);
       const nightLabel = nights ? `${nights}n` : '';
 
       const cell = document.createElement('div');
-      cell.style.cssText = `background:${cfg.bg};border:1px solid ${cfg.border};border-radius:4px;padding:0.5rem 0.6rem;font-size:0.75rem;`;
+      const cellBg = isDone ? '#d4edda' : cfg.bg;
+      const cellBorder = isDone ? '#2a6b4a' : cfg.border;
+      cell.style.cssText = `background:${cellBg};border:2px solid ${cellBorder};border-radius:4px;padding:0.5rem 0.6rem;font-size:0.75rem;${isDone ? 'position:relative;' : ''}`;
 
       // Check-in time dropdown (shown on checkin and both tiles)
       let checkinHtml = '';
@@ -1092,20 +1110,27 @@ function renderAdminSchedule(slots, claims, container) {
       // Cleaner assign dropdown (shown on checkout and both tiles)
       let assignHtml = '';
       if (isCheckout) {
-        const options = adminCleanerNames.map(n =>
-          `<option value="${n}" ${claim && claim.cleaner===n ? 'selected':''}>${n}</option>`
-        ).join('');
-        assignHtml = claim
-          ? `<div style="margin-top:0.35rem;display:flex;align-items:center;gap:0.3rem;">
-               <span style="color:var(--green);font-size:0.7rem;">✓ ${claim.cleaner}</span>
-               <button onclick="adminRemove('${key}')" style="font-size:0.6rem;color:var(--accent);border:none;background:none;cursor:pointer;padding:0;">✕</button>
-             </div>`
-          : adminCleanerNames.length > 0
-            ? `<select onchange="adminAssign('${key}','${dayKey(day)}','${unit}',this.value)"
-                style="margin-top:0.35rem;width:100%;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.2rem 0.3rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
-                <option value="">Assign…</option>${options}
-              </select>`
-            : '';
+        if (isDone) {
+          assignHtml = `<div style="margin-top:0.35rem;">
+            <span style="color:#1a4a30;font-size:0.72rem;font-weight:600;">✅ Clean &amp; Ready</span>
+            ${claim ? `<span style="color:#2a6b4a;font-size:0.65rem;"> · ${claim.cleaner}</span>` : ''}
+          </div>`;
+        } else {
+          const options = adminCleanerNames.map(n =>
+            `<option value="${n}" ${claim && claim.cleaner===n ? 'selected':''}>${n}</option>`
+          ).join('');
+          assignHtml = claim
+            ? `<div style="margin-top:0.35rem;display:flex;align-items:center;gap:0.3rem;">
+                 <span style="color:var(--green);font-size:0.7rem;">✓ ${claim.cleaner}</span>
+                 <button onclick="adminRemove('${key}')" style="font-size:0.6rem;color:var(--accent);border:none;background:none;cursor:pointer;padding:0;">✕</button>
+               </div>`
+            : adminCleanerNames.length > 0
+              ? `<select onchange="adminAssign('${key}','${dayKey(day)}','${unit}',this.value)"
+                  style="margin-top:0.35rem;width:100%;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.2rem 0.3rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
+                  <option value="">Assign…</option>${options}
+                </select>`
+              : '';
+        }
       }
 
       cell.innerHTML = `
@@ -1113,7 +1138,7 @@ function renderAdminSchedule(slots, claims, container) {
           <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
-        <div style="color:${cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
+        <div style="color:${isDone ? '#1a4a30' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
         ${checkinHtml}${assignHtml}`;
       grid.appendChild(cell);
     }
