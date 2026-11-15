@@ -991,14 +991,9 @@ function makeICS(slots) {
 
 function downloadICSAll() {
   const ics = makeICS(pendingCalendarSlots);
-  // data: URI works on iOS Safari where blob: URLs are blocked for downloads
+  // On iOS, opening a data: URI in a new window triggers "Open in Calendar"
   const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-  const a = document.createElement('a');
-  a.href = dataUri;
-  a.download = 'bau-cleaning-schedule.ics';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+  window.open(dataUri, '_blank');
   dismissCalendarPrompt();
 }
 
@@ -1038,22 +1033,19 @@ function showCalendarPrompt() {
 
   const prompt = document.createElement('div');
   prompt.id = 'cal-prompt';
-  // Full-screen dark overlay
+  // Bottom sheet with dark backdrop
   prompt.style.cssText = `
     position:fixed;top:0;left:0;right:0;bottom:0;
-    background:rgba(0,0,0,0.65);
+    background:rgba(0,0,0,0.55);
     z-index:9999;
-    display:flex;align-items:center;justify-content:center;
-    padding:1.5rem;
-    -webkit-backdrop-filter:blur(2px);
-    backdrop-filter:blur(2px);
+    display:flex;align-items:flex-end;justify-content:center;
   `;
   prompt.innerHTML = `
-    <div style="background:var(--card);border-radius:16px;padding:1.5rem 1.5rem 1.25rem;width:100%;max-width:360px;box-shadow:0 8px 40px rgba(0,0,0,0.35);">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem;">
+    <div style="background:var(--card);border-radius:20px 20px 0 0;padding:1.25rem 1.25rem 2rem;width:100%;max-width:480px;box-shadow:0 -4px 30px rgba(0,0,0,0.25);">
+      <div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 1rem;"></div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem;">
         <div>
-          <div style="font-size:1.5rem;margin-bottom:0.3rem;">📅</div>
-          <div style="font-weight:700;font-size:1rem;">Add to your calendar?</div>
+          <div style="font-weight:700;font-size:1rem;">📅 Add to your calendar?</div>
           <div style="font-size:0.78rem;color:var(--muted);margin-top:0.15rem;">${count} slot${count>1?'s':''} claimed · 11 AM – 4 PM</div>
         </div>
         <button onclick="dismissCalendarPrompt()"
@@ -1064,11 +1056,11 @@ function showCalendarPrompt() {
       </div>
       <div style="display:flex;flex-direction:column;gap:0.5rem;">
         <button onclick="downloadICSAll()"
-          style="width:100%;padding:0.8rem;border-radius:10px;border:none;background:var(--green);color:white;font-size:0.9rem;font-weight:600;cursor:pointer;font-family:inherit;">
+          style="width:100%;padding:0.85rem;border-radius:10px;border:none;background:var(--green);color:white;font-size:0.95rem;font-weight:600;cursor:pointer;font-family:inherit;">
           🍎 Add to Apple Calendar
         </button>
         <button onclick="openAllGoogleCal()"
-          style="width:100%;padding:0.8rem;border-radius:10px;border:1px solid var(--border);background:white;font-size:0.9rem;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text);">
+          style="width:100%;padding:0.85rem;border-radius:10px;border:1px solid var(--border);background:white;font-size:0.95rem;font-weight:600;cursor:pointer;font-family:inherit;color:var(--text);">
           🗓 Add to Google Calendar
         </button>
         <button onclick="dismissCalendarPrompt()"
