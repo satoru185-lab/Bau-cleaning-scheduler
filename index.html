@@ -1150,6 +1150,8 @@ async function loadAdminSchedule() {
   onSnapshot(collection(db, 'cleaners'), snap => {
     adminCleanerNames = [];
     snap.forEach(d => adminCleanerNames.push(d.data().name));
+    // Re-render so Assign dropdown appears now that cleaner names are loaded
+    renderAdminSchedule(adminFullSlots, latestAdminClaims, container, adminCompletedKeys);
   });
 
   let latestAdminClaims = {};
