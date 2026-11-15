@@ -991,9 +991,21 @@ function makeICS(slots) {
 
 function downloadICSAll() {
   const ics = makeICS(pendingCalendarSlots);
-  // On iOS, opening a data: URI in a new window triggers "Open in Calendar"
-  const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-  window.open(dataUri, '_blank');
+  try {
+    // Blob URL approach — works on most browsers including iOS Safari
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bau-cleaning-schedule.ics';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+  } catch(e) {
+    // Fallback: data URI
+    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    window.location.href = dataUri;
+  }
   dismissCalendarPrompt();
 }
 
@@ -1030,8 +1042,7 @@ function showCalendarPrompt() {
     const label = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
     return `<div style="font-size:0.78rem;color:var(--muted);">Unit ${unit} · ${label}</div>`;
   }).join('');
-  // Build ICS data URI now so it can go directly in an <a> href (iOS won't block native links)
-  const icsDataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(makeICS(pendingCalendarSlots));
+  // No data URI needed — Apple Calendar uses downloadICSAll() which creates a Blob URL at tap time
 
   const prompt = document.createElement('div');
   prompt.id = 'cal-prompt';
@@ -1042,7 +1053,7 @@ function showCalendarPrompt() {
     border-top:2px solid #3a7d5a;
     box-shadow:0 -4px 16px rgba(0,0,0,0.22);
     z-index:9999;
-    padding:0.6rem 0.9rem 1.2rem;
+    padding:0.6rem 0.9rem 2.2rem;
   `;
   prompt.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
@@ -1054,10 +1065,10 @@ function showCalendarPrompt() {
         style="background:none;border:none;font-size:1.1rem;color:#555555;cursor:pointer;padding:0;flex-shrink:0;">✕</button>
     </div>
     <div style="display:flex;gap:0.4rem;margin-top:0.45rem;">
-      <a id="ics-link" href="${icsDataUri}" download="bau-cleaning-schedule.ics"
-        style="flex:1;display:flex;align-items:center;justify-content:center;padding:0.55rem 0.4rem;border-radius:8px;background:#3a7d5a;color:#ffffff;font-size:0.78rem;font-weight:600;text-decoration:none;box-sizing:border-box;">
+      <button onclick="downloadICSAll()"
+        style="flex:1;padding:0.55rem 0.4rem;border-radius:8px;border:none;background:#3a7d5a;color:#ffffff;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;box-sizing:border-box;">
         🍎 Apple Calendar
-      </a>
+      </button>
       <button onclick="openAllGoogleCal()"
         style="flex:1;padding:0.55rem 0.4rem;border-radius:8px;border:1px solid #cccccc;background:#f5f5f5;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:inherit;color:#111111;">
         🗓 Google Calendar
@@ -1069,15 +1080,6 @@ function showCalendarPrompt() {
     </div>
   `;
   document.body.appendChild(prompt);
-  // On iOS, wire up touchend on the ICS link to ensure it fires
-  const icsLink = document.getElementById('ics-link');
-  if (icsLink) {
-    icsLink.addEventListener('touchend', function(e) {
-      e.preventDefault();
-      window.location.href = icsDataUri;
-      setTimeout(dismissCalendarPrompt, 800);
-    }, { once: true });
-  }
   // Auto-dismiss after 60 seconds so cleaner can keep claiming slots
   calendarPromptTimer = setTimeout(dismissCalendarPrompt, 60000);
 }
