@@ -1015,6 +1015,9 @@ function openAllGoogleCal() {
 function dismissCalendarPrompt() {
   const el = document.getElementById('cal-prompt');
   if (el) el.remove();
+  // Restore bottom nav
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = '';
   pendingCalendarSlots = [];
   if (calendarPromptTimer) { clearTimeout(calendarPromptTimer); calendarPromptTimer = null; }
 }
@@ -1071,6 +1074,9 @@ function showCalendarPrompt() {
     </div>
   `;
   document.body.appendChild(prompt);
+  // Hide bottom nav so it doesn't intercept taps on the calendar bar
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = 'none';
   // Wire up events after DOM insertion — more reliable than inline onclick on iOS
   document.getElementById('cal-dismiss-x').addEventListener('click', dismissCalendarPrompt);
   document.getElementById('cal-google-btn').addEventListener('click', openAllGoogleCal);
