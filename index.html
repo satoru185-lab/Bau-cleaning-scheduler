@@ -989,12 +989,11 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
   // Tiers that see TBD slots: basic, standard, full
   const seeTbd = access !== 'limited';
   // Tiers that see taken slots (not just own): basic, standard, full
-  const seeTaken = access !== 'limited';
-
   for (const { day, checkouts, tbd } of slots) {
     const visibleSlots = checkouts.filter(({unit}) => {
       const claim = claims[slotKey(day, unit)];
-      if (!seeTaken) return !claim || claim.cleaner === currentUser.name;
+      // Limited: only show slots that are unclaimed or claimed by me
+      if (access === 'limited') return !claim || claim.cleaner === currentUser.name;
       return true;
     });
 
@@ -1034,7 +1033,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
         rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
            <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
       } else if (isClaimed) {
-        // full: show name · standard: "Taken" · basic: "Unavailable"
+        // full: show name · standard: "Taken" · basic/limited: "Unavailable"
         const label = access === 'full' ? claim.cleaner : access === 'standard' ? 'Taken' : 'Unavailable';
         rightSide = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
       } else {
