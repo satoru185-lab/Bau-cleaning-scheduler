@@ -506,10 +506,10 @@ body { padding-bottom: 5rem; }
       <input type="number" id="cashapp-amount" inputmode="decimal" min="0" step="0.01"
         style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
     </div>
-    <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;" onclick="notifyOwner()" id="notify-btn">
+    <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;touch-action:manipulation;" onclick="notifyOwner()" id="notify-btn">
       ✅ Notify Satoru — Unit Ready
     </button>
-    <button class="btn btn-ghost" style="width:100%;margin-top:0.75rem;font-size:0.8rem;" onclick="closeChecklist()">Back to schedule</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:0.75rem;font-size:0.8rem;touch-action:manipulation;" onclick="closeChecklist()">Back to schedule</button>
   </div>
 </div>
 
@@ -2109,6 +2109,9 @@ function updateProgress(unit) {
       // Leave amount blank — cleaner fills in manually each time
       document.getElementById('cashapp-amount').value = '';
       document.getElementById('complete-screen').style.display = 'block';
+      // Always hide bottom nav when complete screen shows — it may have been restored by calendar prompt
+      const bottomNav = document.querySelector('.bottom-nav');
+      if (bottomNav) bottomNav.style.display = 'none';
     }, 400);
   }
 }
@@ -2213,28 +2216,66 @@ async function loadAdminHistory() {
 // ── Cleaner past cleans ───────────────────────────────────
 async function loadMyHistory() {
   const { collection, getDocs } = window._fb;
-  const snap = await getDocs(collection(db, 'history'));
+  const [histSnap, claimsSnap] = await Promise.all([
+    getDocs(collection(db, 'history')),
+    getDocs(collection(db, 'claims'))
+  ]);
 
-  const mine = [];
-  snap.forEach(d => {
-    if (d.data().cleaner === currentUser.name) mine.push(d.data());
+  // Completed cleans
+  const completed = {};
+  histSnap.forEach(d => {
+    if (d.data().cleaner === currentUser.name) completed[d.id] = d.data();
   });
-  mine.sort((a,b) => b.date.localeCompare(a.date));
+
+  // All my claims (including in-progress / not yet notified)
+  const myClaims = {};
+  claimsSnap.forEach(d => {
+    if (d.data().cleaner === currentUser.name) myClaims[d.id] = d.data();
+  });
+
+  // Build combined list: completed entries + in-progress claims (past or today, not in history)
+  const today = new Date(); today.setHours(0,0,0,0);
+  const rows = [];
+
+  // Add all completed history entries
+  for (const [key, r] of Object.entries(completed)) {
+    rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done' });
+  }
+
+  // Add claimed-but-not-completed slots that are today or in the past
+  for (const [key, c] of Object.entries(myClaims)) {
+    if (completed[key]) continue; // already in history
+    const claimDate = new Date(c.date + 'T12:00:00');
+    if (claimDate <= today) {
+      rows.push({ date: c.date, unit: c.unit, nights: 0, status: 'in-progress', key });
+    }
+  }
+
+  rows.sort((a,b) => b.date.localeCompare(a.date));
 
   const wrap = document.getElementById('my-history-list');
   if (!wrap) return;
-  if (mine.length === 0) {
+  if (rows.length === 0) {
     wrap.innerHTML = '<span style="color:var(--muted);font-size:0.82rem;">No completed cleans yet.</span>';
     return;
   }
   wrap.innerHTML = '';
-  for (const r of mine.slice(0, 20)) {
+  for (const r of rows.slice(0, 20)) {
     const d = new Date(r.date + 'T12:00:00');
     const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
     const nightLabel = r.nights ? ` · ${r.nights} night${r.nights===1?'':'s'}` : '';
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
-    row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span><span style="color:var(--green);">✅</span>`;
+    if (r.status === 'in-progress') {
+      row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
+        <div style="display:flex;align-items:center;gap:0.5rem;">
+          <span style="color:var(--accent);font-size:0.72rem;">In progress</span>
+          <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;"
+            onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">Resume</button>
+        </div>`;
+    } else {
+      row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span><span style="color:var(--green);">✅</span>`;
+    }
     wrap.appendChild(row);
   }
 }
