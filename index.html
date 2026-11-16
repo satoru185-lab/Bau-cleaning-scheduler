@@ -676,7 +676,7 @@ window.login = async function() {
   const { doc, getDoc } = window._fb;
   const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
   if (snap.exists() && snap.data().pin === pin) {
-    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0, accessLevel: snap.data().accessLevel || 'limited' };
+    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0, accessLevel: snap.data().accessLevel || 'basic' };
     showApp();
     return;
   }
@@ -985,19 +985,18 @@ async function loadCleanerSchedule() {
 
 function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKeys = new Set()) {
   container.innerHTML = '';
-  const access = (currentUser && currentUser.accessLevel) || 'limited';
-  // Tiers that see TBD slots: basic, standard, full
-  const seeTbd = access !== 'limited';
-  // Tiers that see taken slots (not just own): basic, standard, full
+  const access = (currentUser && currentUser.accessLevel) || 'basic';
+  // basic: open+mine+TBD only · standard: all slots, "Taken" label · full: all slots, name label
+  const seeTbd = true; // all tiers see TBD
   for (const { day, checkouts, tbd } of slots) {
     const visibleSlots = checkouts.filter(({unit}) => {
       const claim = claims[slotKey(day, unit)];
-      // Limited: only show slots that are unclaimed or claimed by me
-      if (access === 'limited') return !claim || claim.cleaner === currentUser.name;
+      // basic: hide taken-by-other slots entirely
+      if (access === 'basic') return !claim || claim.cleaner === currentUser.name;
       return true;
     });
 
-    const visibleTbd = seeTbd ? (tbd || []) : [];
+    const visibleTbd = tbd || [];
 
     if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
 
@@ -1033,8 +1032,8 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
         rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
            <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
       } else if (isClaimed) {
-        // full: show name · standard: "Taken" · basic/limited: "Unavailable"
-        const label = access === 'full' ? claim.cleaner : access === 'standard' ? 'Taken' : 'Unavailable';
+        // full: show name · standard: "Taken"
+        const label = access === 'full' ? claim.cleaner : 'Taken';
         rightSide = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
       } else {
         rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
@@ -1795,10 +1794,9 @@ async function loadCleanersList() {
             Access
             <select onchange="setCleanerAccess('${d.id}', this.value)"
               style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
-              <option value="limited"  ${(data.accessLevel||'limited')==='limited'  ?'selected':''}>Limited</option>
-              <option value="basic"    ${(data.accessLevel||'limited')==='basic'    ?'selected':''}>Basic</option>
-              <option value="standard" ${(data.accessLevel||'limited')==='standard' ?'selected':''}>Standard</option>
-              <option value="full"     ${(data.accessLevel||'limited')==='full'     ?'selected':''}>Full</option>
+              <option value="basic"    ${(data.accessLevel||'basic')==='basic'    ?'selected':''}>Basic</option>
+              <option value="standard" ${(data.accessLevel||'basic')==='standard' ?'selected':''}>Standard</option>
+              <option value="full"     ${(data.accessLevel||'basic')==='full'     ?'selected':''}>Full</option>
             </select>
           </label>
         </div>`;
