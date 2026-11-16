@@ -494,6 +494,18 @@ body { padding-bottom: 5rem; }
     <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;" onclick="notifyOwner()" id="notify-btn">
       Notify Satoru — Unit Ready
     </button>
+    <div id="cashapp-wrap" style="display:none;margin-top:0.75rem;">
+      <button class="btn" id="cashapp-btn"
+        style="width:100%;font-size:0.9rem;padding:0.75rem;background:#00D64F;color:#000;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-weight:600;cursor:pointer;"
+        onclick="requestCashAppPayment()">
+        💸 Request Payment via Cash App
+      </button>
+      <div id="cashapp-amount-row" style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;justify-content:center;">
+        <span style="font-size:0.78rem;color:#555;">Amount: $</span>
+        <input type="number" id="cashapp-amount" inputmode="decimal" min="0" step="0.01"
+          style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
+      </div>
+    </div>
     <button class="btn btn-ghost" style="width:100%;margin-top:0.75rem;font-size:0.8rem;" onclick="closeChecklist()">Back to schedule</button>
   </div>
 </div>
@@ -591,6 +603,7 @@ body { padding-bottom: 5rem; }
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <input type="text" id="new-cleaner-name" placeholder="Name" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);flex:1;min-width:120px;" />
             <input type="password" id="new-cleaner-pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);width:160px;" />
+            <input type="number" id="new-cleaner-pay" placeholder="Pay $" inputmode="decimal" min="0" step="0.01" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);width:90px;" />
             <button class="btn btn-green" onclick="addCleaner()">Add</button>
           </div>
           <div class="status" id="add-cleaner-status"></div>
@@ -654,23 +667,24 @@ window.login = async function() {
   const statusEl = document.getElementById('login-status');
   if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
 
-  // Admin check
+  // Cleaner check first — a cleaner record always wins, even if PIN matches admin
+  const { doc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
+  if (snap.exists() && snap.data().pin === pin) {
+    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0 };
+    showApp();
+    return;
+  }
+
+  // Admin check — only if no cleaner record matched
   if (ADMIN_PINS[pin]) {
     currentUser = { name: ADMIN_PINS[pin], role: 'admin' };
     showApp();
     return;
   }
 
-  // Cleaner check
-  const { doc, getDoc } = window._fb;
-  const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
-  if (!snap.exists() || snap.data().pin !== pin) {
-    statusEl.textContent = 'Name or PIN not recognized.';
-    statusEl.className = 'status error';
-    return;
-  }
-  currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14 };
-  showApp();
+  statusEl.textContent = 'Name or PIN not recognized.';
+  statusEl.className = 'status error';
 };
 
 window.logout = function() {
@@ -1615,13 +1629,20 @@ async function loadCleanersList() {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;gap:0.5rem;';
       row.innerHTML = `
-        <span style="flex:1;">${data.name}</span>
+        <span style="flex:1;font-weight:600;">${data.name}</span>
         <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
           Window
           <select onchange="setCleanerWindow('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
             ${opts}
           </select>
+        </label>
+        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
+          Pay
+          <input type="number" value="${data.pay||''}" placeholder="$"
+            inputmode="decimal" min="0" step="0.01"
+            onchange="setCleanerPay('${d.id}', this.value)"
+            style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);width:60px;" />
         </label>
         <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>`;
       list.appendChild(row);
@@ -1638,17 +1659,29 @@ window.setCleanerWindow = async function(id, days) {
 };
 
 window.addCleaner = async function() {
-  const name = document.getElementById('new-cleaner-name').value.trim();
-  const pin  = document.getElementById('new-cleaner-pin').value.trim();
+  const name   = document.getElementById('new-cleaner-name').value.trim();
+  const pin    = document.getElementById('new-cleaner-pin').value.trim();
+  const payRaw = document.getElementById('new-cleaner-pay').value.trim();
   const statusEl = document.getElementById('add-cleaner-status');
   if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
   if (pin.length < 4) { statusEl.textContent = 'PIN must be 4–6 digits.'; statusEl.className='status error'; return; }
   const { doc, setDoc } = window._fb;
-  await setDoc(doc(db, 'cleaners', name.toLowerCase()), { name, pin });
+  const data = { name, pin };
+  if (payRaw) data.pay = parseFloat(payRaw);
+  await setDoc(doc(db, 'cleaners', name.toLowerCase()), data);
   statusEl.textContent = `✓ ${name} added.`;
   statusEl.className = 'status ok';
   document.getElementById('new-cleaner-name').value = '';
   document.getElementById('new-cleaner-pin').value = '';
+  document.getElementById('new-cleaner-pay').value = '';
+};
+
+window.setCleanerPay = async function(id, val) {
+  const { doc, setDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', id));
+  if (snap.exists()) {
+    await setDoc(doc(db, 'cleaners', id), { ...snap.data(), pay: parseFloat(val) || 0 });
+  }
 };
 
 window.removeCleaner = async function(id) {
@@ -1775,6 +1808,7 @@ const UNIT_CHECKLISTS = {
 
 // owner phone number for SMS
 const OWNER_PHONE = '8456168631';
+const OWNER_CASHTAG = 'SatoruBauman';
 
 // Ntfy.sh push notification topic (Satoru's private channel)
 const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
@@ -1913,10 +1947,24 @@ function updateProgress(unit) {
       const sub = document.getElementById('complete-sub');
       sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.`;
       document.getElementById('notify-btn').textContent = `Notify Satoru — Unit ${clState.unit} Ready`;
+      // Show Cash App button always; pre-fill pay amount if set for this cleaner
+      const cashWrap = document.getElementById('cashapp-wrap');
+      cashWrap.style.display = 'block';
+      const amtInput = document.getElementById('cashapp-amount');
+      amtInput.value = (currentUser && currentUser.pay) ? currentUser.pay.toFixed(2) : '';
       document.getElementById('complete-screen').style.display = 'block';
     }, 400);
   }
 }
+
+window.requestCashAppPayment = function() {
+  const amount = parseFloat(document.getElementById('cashapp-amount').value) || 0;
+  const note = encodeURIComponent(`Cleaning Unit ${clState.unit} ${clState.date}`);
+  let url = `https://cash.app/$${OWNER_CASHTAG}`;
+  if (amount > 0) url += `/${amount.toFixed(2)}`;
+  url += `?note=${note}`;
+  window.open(url, '_blank');
+};
 
 window.notifyOwner = async function() {
   // Write to history collection
