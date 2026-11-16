@@ -1006,17 +1006,19 @@ async function loadCleanerSchedule() {
 function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKeys = new Set()) {
   container.innerHTML = '';
   const access = (currentUser && currentUser.accessLevel) || 'basic';
-  // basic: open+mine+TBD only · standard: all slots, "Taken" label · full: all slots, name label
-  const seeTbd = true; // all tiers see TBD
+  // viewonly: assigned slots only, no claiming · basic: open+mine+TBD · standard: all+"Taken" · full: all+names
+  const seeTbd = access !== 'viewonly';
   for (const { day, checkouts, tbd } of slots) {
     const visibleSlots = checkouts.filter(({unit}) => {
       const claim = claims[slotKey(day, unit)];
-      // basic: hide taken-by-other slots entirely
+      // viewonly: only slots assigned to me
+      if (access === 'viewonly') return claim && claim.cleaner === currentUser.name;
+      // basic: only open or mine
       if (access === 'basic') return !claim || claim.cleaner === currentUser.name;
       return true;
     });
 
-    const visibleTbd = tbd || [];
+    const visibleTbd = seeTbd ? (tbd || []) : [];
 
     if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
 
@@ -1049,8 +1051,13 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       if (isDone) {
         rightSide = `<span class="slot-claimer mine" style="font-size:1.1rem;">✅ Done</span>`;
       } else if (isMe) {
-        rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
-           <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
+        if (access === 'viewonly') {
+          // View-only: show assigned badge + checklist button, no release
+          rightSide = `<span class="slot-claimer mine">✓ Assigned</span>`;
+        } else {
+          rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
+             <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
+        }
       } else if (isClaimed) {
         // full: show name · standard: "Taken"
         const label = access === 'full' ? claim.cleaner : 'Taken';
@@ -1814,6 +1821,7 @@ async function loadCleanersList() {
             Access
             <select onchange="setCleanerAccess('${d.id}', this.value)"
               style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
+              <option value="viewonly" ${(data.accessLevel||'basic')==='viewonly' ?'selected':''}>View Only</option>
               <option value="basic"    ${(data.accessLevel||'basic')==='basic'    ?'selected':''}>Basic</option>
               <option value="standard" ${(data.accessLevel||'basic')==='standard' ?'selected':''}>Standard</option>
               <option value="full"     ${(data.accessLevel||'basic')==='full'     ?'selected':''}>Full</option>
@@ -2014,7 +2022,7 @@ const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {}, guestRating: 0 };
 
 window.openChecklist = function(unit, date, nights) {
-  clState = { unit, date, nights: parseInt(nights)||0, roomIndex: 0, checked: {}, guestRating: 0 };
+  clState = { unit, date, nights: parseInt(nights)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString() };
   document.getElementById('cl-title').textContent = `Unit ${unit}`;
   document.getElementById('cl-date').textContent = date + (clState.nights ? ` · ${clState.nights} night${clState.nights===1?'':'s'}` : '');
   document.getElementById('complete-screen').style.display = 'none';
@@ -2167,6 +2175,7 @@ window.notifyOwner = async function() {
       cleaner: currentUser.name,
       nights: clState.nights || 0,
       guestRating: stars || null,
+      startedAt: clState.startedAt || null,
       completedAt: new Date().toISOString()
     });
   } catch(e) { console.error('History write failed:', e); }
@@ -2232,9 +2241,15 @@ async function loadAdminHistory() {
       const d = new Date(r.date + 'T12:00:00');
       const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
       const nightLabel = r.nights ? ` · ${r.nights}n` : '';
+      const startedStr = r.startedAt
+        ? new Date(r.startedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })
+        : null;
       const completedStr = r.completedAt
         ? new Date(r.completedAt).toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' })
-        : '';
+        : null;
+      const timeStr = startedStr && completedStr
+        ? `${startedStr} → ${completedStr}`
+        : completedStr ? `Done ${completedStr}` : '';
 
       const row = document.createElement('div');
       row.className = 'card';
@@ -2242,7 +2257,7 @@ async function loadAdminHistory() {
       row.innerHTML = `
         <div>
           <div style="font-size:0.85rem;font-weight:500;">${dateStr} — Unit ${r.unit}${nightLabel}</div>
-          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">Cleaned by ${r.cleaner}${completedStr ? ' · Done at ' + completedStr : ''}</div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">Cleaned by ${r.cleaner}${timeStr ? ' · ' + timeStr : ''}</div>
         </div>
         <span style="font-size:1.1rem;">✅</span>`;
       block.appendChild(row);
