@@ -606,7 +606,6 @@ body { padding-bottom: 5rem; }
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <input type="text" id="new-cleaner-name" placeholder="Name" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);flex:1;min-width:120px;" />
             <input type="password" id="new-cleaner-pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);width:160px;" />
-            <input type="number" id="new-cleaner-pay" placeholder="Pay $" inputmode="decimal" min="0" step="0.01" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);width:90px;" />
             <button class="btn btn-green" onclick="addCleaner()">Add</button>
           </div>
           <div class="status" id="add-cleaner-status"></div>
@@ -654,6 +653,9 @@ async function bootApp() {
     await initFirebase(FIREBASE_CONFIG);
     await Promise.all([loadChecklistsFromFirestore(), loadCheckinTimes()]);
     document.getElementById('login-card').style.display = 'block';
+    // Hide bottom nav on login screen so it doesn't cover the Sign In button
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) bottomNav.style.display = 'none';
   } catch(e) {
     console.error('Firebase error:', e);
     document.body.insertAdjacentHTML('afterbegin',
@@ -697,10 +699,16 @@ window.logout = function() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-card').style.display = 'block';
   document.getElementById('login-pin').value = '';
+  // Hide bottom nav again on logout
+  const bottomNavOut = document.querySelector('.bottom-nav');
+  if (bottomNavOut) bottomNavOut.style.display = 'none';
 };
 
 function showApp() {
   document.getElementById('login-card').style.display = 'none';
+  // Restore bottom nav now that we're past the login screen
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = '';
   const bar = document.getElementById('user-bar');
   bar.style.display = 'flex';
   document.getElementById('bar-name').textContent = currentUser.name;
@@ -1691,13 +1699,6 @@ async function loadCleanersList() {
           </select>
         </label>
         <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
-          Pay
-          <input type="number" value="${data.pay||''}" placeholder="$"
-            inputmode="decimal" min="0" step="0.01"
-            onchange="setCleanerPay('${d.id}', this.value)"
-            style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);width:60px;" />
-        </label>
-        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
           Access
           <select onchange="setCleanerAccess('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
@@ -1721,21 +1722,17 @@ window.setCleanerWindow = async function(id, days) {
 };
 
 window.addCleaner = async function() {
-  const name   = document.getElementById('new-cleaner-name').value.trim();
-  const pin    = document.getElementById('new-cleaner-pin').value.trim();
-  const payRaw = document.getElementById('new-cleaner-pay').value.trim();
+  const name = document.getElementById('new-cleaner-name').value.trim();
+  const pin  = document.getElementById('new-cleaner-pin').value.trim();
   const statusEl = document.getElementById('add-cleaner-status');
   if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
   if (pin.length < 4) { statusEl.textContent = 'PIN must be 4–6 digits.'; statusEl.className='status error'; return; }
   const { doc, setDoc } = window._fb;
-  const data = { name, pin };
-  if (payRaw) data.pay = parseFloat(payRaw);
-  await setDoc(doc(db, 'cleaners', name.toLowerCase()), data);
+  await setDoc(doc(db, 'cleaners', name.toLowerCase()), { name, pin });
   statusEl.textContent = `✓ ${name} added.`;
   statusEl.className = 'status ok';
   document.getElementById('new-cleaner-name').value = '';
   document.getElementById('new-cleaner-pin').value = '';
-  document.getElementById('new-cleaner-pay').value = '';
 };
 
 window.setCleanerPay = async function(id, val) {
@@ -2017,9 +2014,8 @@ function updateProgress(unit) {
       const sub = document.getElementById('complete-sub');
       sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.`;
       document.getElementById('notify-btn').textContent = `Notify Satoru — Unit ${clState.unit} Ready`;
-      // Pre-fill pay amount if set for this cleaner
-      const amtInput = document.getElementById('cashapp-amount');
-      amtInput.value = (currentUser && currentUser.pay) ? currentUser.pay.toFixed(2) : '';
+      // Leave amount blank — cleaner fills in manually each time
+      document.getElementById('cashapp-amount').value = '';
       document.getElementById('complete-screen').style.display = 'block';
     }, 400);
   }
