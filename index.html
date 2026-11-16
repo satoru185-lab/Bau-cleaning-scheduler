@@ -498,7 +498,7 @@ body { padding-bottom: 5rem; }
       <button class="btn" id="cashapp-btn"
         style="width:100%;font-size:0.9rem;padding:0.75rem;background:#00D64F;color:#000;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-weight:600;cursor:pointer;"
         onclick="requestCashAppPayment()">
-        💸 Request Payment via Cash App
+        💸 Text Satoru — Request Payment
       </button>
       <div id="cashapp-amount-row" style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;justify-content:center;">
         <span style="font-size:0.78rem;color:#555;">Amount: $</span>
@@ -1959,11 +1959,9 @@ function updateProgress(unit) {
 
 window.requestCashAppPayment = function() {
   const amount = parseFloat(document.getElementById('cashapp-amount').value) || 0;
-  const note = encodeURIComponent(`Cleaning Unit ${clState.unit} ${clState.date}`);
-  let url = `https://cash.app/$${OWNER_CASHTAG}`;
-  if (amount > 0) url += `/${amount.toFixed(2)}`;
-  url += `?note=${note}`;
-  window.open(url, '_blank');
+  const amtStr = amount > 0 ? `$${amount.toFixed(2)}` : '';
+  const body = encodeURIComponent(`Hi Satoru! Please send me ${amtStr} on Cash App for cleaning Unit ${clState.unit} on ${clState.date}. Thanks!`);
+  window.location.href = `sms:${OWNER_PHONE}&body=${body}`;
 };
 
 window.notifyOwner = async function() {
