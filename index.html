@@ -799,7 +799,7 @@ async function fetchAllICals() {
 
 async function getCheckoutSlots() {
   const icals = await fetchAllICals();
-  const windowDays = (currentUser && currentUser.scheduleDays) ? currentUser.scheduleDays : 28;
+  const windowDays = (currentUser && currentUser.scheduleDays) ? currentUser.scheduleDays : 60;
   const days = getDays(windowDays);
   const result = [];
 
@@ -828,7 +828,7 @@ async function getCheckoutSlots() {
 // Full schedule for admin — all units, all statuses
 async function getFullSchedule() {
   const icals = await fetchAllICals();
-  const days = getDays(28);
+  const days = getDays(60);
   const result = [];
 
   for (const day of days) {
@@ -1550,19 +1550,23 @@ function compressImage(file, maxW, maxKB) {
       const img = new Image();
       img.onerror = reject;
       img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale = Math.min(1, maxW / img.width);
-        canvas.width  = Math.round(img.width  * scale);
-        canvas.height = Math.round(img.height * scale);
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-        // Try quality steps until under maxKB
-        let quality = 0.82;
-        let dataUrl;
-        do {
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
-          quality -= 0.08;
-        } while (dataUrl.length > maxKB * 1024 * 1.37 && quality > 0.1);
-        resolve(dataUrl);
+        // Keep reducing size until under maxKB
+        const tryCompress = (width, quality) => {
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(1, width / img.width);
+          canvas.width  = Math.round(img.width  * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          // base64 overhead is ~1.37x
+          if (dataUrl.length > maxKB * 1024 * 1.37) {
+            if (quality > 0.25) return tryCompress(width, quality - 0.1);
+            if (width > 400)    return tryCompress(Math.round(width * 0.75), 0.6);
+            // Last resort — return whatever we have
+          }
+          return dataUrl;
+        };
+        resolve(tryCompress(maxW, 0.78));
       };
       img.src = e.target.result;
     };
@@ -1580,7 +1584,7 @@ window.uploadRoomPhotos = async function(unit, roomIdx, input) {
   try {
     for (let i = 0; i < files.length; i++) {
       statusEl.textContent = `Compressing ${i+1}/${files.length}…`;
-      const dataUrl = await compressImage(files[i], 900, 500);
+      const dataUrl = await compressImage(files[i], 800, 200);
       room.photos.push(dataUrl);
     }
     room.photo = room.photos[0] || null;
@@ -1594,7 +1598,7 @@ window.uploadRoomPhotos = async function(unit, roomIdx, input) {
   }
 };
 
-const SCHEDULE_WINDOW_OPTIONS = [7, 14, 21, 30];
+const SCHEDULE_WINDOW_OPTIONS = [7, 14, 21, 30, 45, 60];
 
 async function loadCleanersList() {
   const { collection, onSnapshot } = window._fb;
