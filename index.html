@@ -605,9 +605,10 @@ body { padding-bottom: 5rem; }
           <div class="card-title">Add Cleaner</div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <input type="text" id="new-cleaner-name" placeholder="Name" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);flex:1;min-width:120px;" />
-            <input type="password" id="new-cleaner-pin" placeholder="PIN (4-6 digits)" inputmode="numeric" maxlength="6" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);width:160px;" />
+            <input type="tel" id="new-cleaner-phone" placeholder="Phone number" inputmode="numeric" style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid var(--border);border-radius:3px;padding:0.5rem 0.75rem;background:var(--bg);flex:1;min-width:140px;" />
             <button class="btn btn-green" onclick="addCleaner()">Add</button>
           </div>
+          <div style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem;">PIN is automatically set to the last 4 digits of their phone number.</div>
           <div class="status" id="add-cleaner-status"></div>
         </div>
         <div class="card">
@@ -676,7 +677,7 @@ window.login = async function() {
   const { doc, getDoc } = window._fb;
   const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
   if (snap.exists() && snap.data().pin === pin) {
-    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0, accessLevel: snap.data().accessLevel || 'basic' };
+    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0, accessLevel: snap.data().accessLevel || 'basic', ntfyTopic: snap.data().ntfyTopic || '' };
     showApp();
     return;
   }
@@ -886,13 +887,32 @@ async function getCheckoutSlots() {
           getDoc(doc(db, 'tbd_claims', key))
         ]);
         if (!claimSnap.exists() && tbdSnap.exists()) {
+          const cleanerName = tbdSnap.data().cleaner;
           await setDoc(doc(db, 'claims', key), {
-            cleaner: tbdSnap.data().cleaner,
+            cleaner: cleanerName,
             date: dayKey(day), unit,
             claimedAt: new Date().toISOString(),
             autoAssigned: true
           });
           await deleteDoc(doc(db, 'tbd_claims', key));
+          // Send push notification to Satoru with SMS deep-link to the cleaner
+          try {
+            const cleanerSnap = await getDoc(doc(db, 'cleaners', cleanerName.toLowerCase()));
+            const cleanerPhone = cleanerSnap.exists() ? (cleanerSnap.data().phone || '') : '';
+            const dateLabel = new Date(dayKey(day) + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+            const smsText = encodeURIComponent(`Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. See the app for details.`);
+            const smsLink = cleanerPhone ? `sms:${cleanerPhone}&body=${smsText}` : '';
+            await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+              method: 'POST',
+              headers: {
+                'Title': `${cleanerName} → Unit ${unit} confirmed`,
+                'Priority': 'high',
+                'Tags': 'white_check_mark',
+                ...(smsLink ? { 'Actions': `view, Text ${cleanerName}, ${smsLink}` } : {})
+              },
+              body: `${cleanerName} was auto-assigned Unit ${unit} on ${dateLabel} from their waitlist.${cleanerPhone ? ' Tap to send confirmation text.' : ''}`
+            });
+          } catch(e) { console.warn('Auto-assign notification failed:', e); }
         }
       }
     }
@@ -1782,7 +1802,7 @@ async function loadCleanersList() {
           <span style="font-weight:600;">${data.name}</span>
           <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>
         </div>
-        <div style="display:flex;align-items:center;gap:0.75rem;">
+        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
           <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
             Window
             <select onchange="setCleanerWindow('${d.id}', this.value)"
@@ -1799,7 +1819,14 @@ async function loadCleanersList() {
               <option value="full"     ${(data.accessLevel||'basic')==='full'     ?'selected':''}>Full</option>
             </select>
           </label>
-        </div>`;
+        </div>
+        <div style="margin-top:0.3rem;display:flex;align-items:center;gap:0.4rem;">
+          <span style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">Phone:</span>
+          <input type="tel" placeholder="Phone number" value="${data.phone||''}"
+            onchange="setCleanerPhone('${d.id}', this.value)"
+            style="font-family:'DM Mono',monospace;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);flex:1;min-width:0;" />
+        </div>
+        <div style="margin-top:0.25rem;font-size:0.68rem;color:var(--muted);">PIN: ${data.pin||'—'}</div>`;
       list.appendChild(row);
     });
   });
@@ -1814,17 +1841,18 @@ window.setCleanerWindow = async function(id, days) {
 };
 
 window.addCleaner = async function() {
-  const name = document.getElementById('new-cleaner-name').value.trim();
-  const pin  = document.getElementById('new-cleaner-pin').value.trim();
+  const name  = document.getElementById('new-cleaner-name').value.trim();
+  const phone = document.getElementById('new-cleaner-phone').value.replace(/\D/g,'');
   const statusEl = document.getElementById('add-cleaner-status');
-  if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
-  if (pin.length < 4) { statusEl.textContent = 'PIN must be 4–6 digits.'; statusEl.className='status error'; return; }
+  if (!name) { statusEl.textContent = 'Enter a name.'; statusEl.className='status error'; return; }
+  if (phone.length < 4) { statusEl.textContent = 'Enter a valid phone number.'; statusEl.className='status error'; return; }
+  const pin = phone.slice(-4);
   const { doc, setDoc } = window._fb;
-  await setDoc(doc(db, 'cleaners', name.toLowerCase()), { name, pin });
-  statusEl.textContent = `✓ ${name} added.`;
+  await setDoc(doc(db, 'cleaners', name.toLowerCase()), { name, pin, phone });
+  statusEl.textContent = `✓ ${name} added. PIN: ${pin}`;
   statusEl.className = 'status ok';
   document.getElementById('new-cleaner-name').value = '';
-  document.getElementById('new-cleaner-pin').value = '';
+  document.getElementById('new-cleaner-phone').value = '';
 };
 
 window.setCleanerPay = async function(id, val) {
@@ -1840,6 +1868,16 @@ window.setCleanerAccess = async function(id, level) {
   const snap = await getDoc(doc(db, 'cleaners', id));
   if (snap.exists()) {
     await setDoc(doc(db, 'cleaners', id), { ...snap.data(), accessLevel: level });
+  }
+};
+
+window.setCleanerPhone = async function(id, phone) {
+  const { doc, setDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', id));
+  if (snap.exists()) {
+    const digits = phone.replace(/\D/g,'');
+    const pin = digits.length >= 4 ? digits.slice(-4) : snap.data().pin;
+    await setDoc(doc(db, 'cleaners', id), { ...snap.data(), phone: digits, pin });
   }
 };
 
