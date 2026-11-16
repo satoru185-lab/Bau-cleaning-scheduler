@@ -425,7 +425,7 @@ body { padding-bottom: 5rem; }
 .complete-screen {
   display: none;
   text-align: center;
-  padding: 3rem 1.5rem;
+  padding: 3rem 1.5rem calc(2rem + env(safe-area-inset-bottom));
 }
 .complete-icon { font-size: 3.5rem; margin-bottom: 1rem; }
 .complete-title {
@@ -1796,6 +1796,9 @@ window.openChecklist = function(unit, date, nights) {
   document.getElementById('start-checklist-btn').style.pointerEvents = 'none';
   document.getElementById('rating-screen').style.display = 'block';
   document.getElementById('checklist-screen').style.display = 'block';
+  // Hide bottom nav so it doesn't cover buttons in checklist/complete screens
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = 'none';
   window.scrollTo(0,0);
 };
 
@@ -1839,6 +1842,9 @@ window.startChecklistAfterRating = function() {
 
 window.closeChecklist = function() {
   document.getElementById('checklist-screen').style.display = 'none';
+  // Restore bottom nav
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = '';
 };
 
 function buildRoomTabs(unit) {
@@ -1935,6 +1941,9 @@ window.notifyOwner = async function() {
   setTimeout(() => {
     // Hide checklist, show main cleaner screen
     document.getElementById('checklist-screen').style.display = 'none';
+    // Restore bottom nav
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) bottomNav.style.display = '';
     document.getElementById('cleaner-screen').style.display = 'block';
     // Refresh Past Cleans list (onSnapshot will also catch this, belt+suspenders)
     loadMyHistory();
