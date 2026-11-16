@@ -148,6 +148,16 @@ h1 span { font-style: italic; color: var(--accent); }
   background: var(--mine);
   border-color: var(--mine-border);
 }
+.slot.claimed-other {
+  background: var(--paper);
+  border-color: var(--border);
+  opacity: 0.6;
+}
+.slot.tbd-slot {
+  background: #fffdf0;
+  border-color: #f0c040;
+  border-style: dashed;
+}
 .slot-unit { font-weight: 500; min-width: 2rem; }
 .slot-label { flex: 1; padding: 0 0.75rem; color: var(--muted); font-size: 0.75rem; }
 .slot-claimer { font-size: 0.75rem; color: var(--green); }
@@ -491,21 +501,14 @@ body { padding-bottom: 5rem; }
     <div class="complete-icon">✅</div>
     <div class="complete-title">All done!</div>
     <div class="complete-sub" id="complete-sub">Unit C is clean and ready for check-in.</div>
-    <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;" onclick="notifyOwner()" id="notify-btn">
-      Notify Satoru — Unit Ready
-    </button>
-    <div id="cashapp-wrap" style="display:none;margin-top:0.75rem;">
-      <button class="btn" id="cashapp-btn"
-        style="width:100%;font-size:0.9rem;padding:0.75rem;background:#00D64F;color:#000;border:none;border-radius:6px;font-family:'DM Mono',monospace;font-weight:600;cursor:pointer;"
-        onclick="requestCashAppPayment()">
-        💸 Text Satoru — Request Payment
-      </button>
-      <div id="cashapp-amount-row" style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;justify-content:center;">
-        <span style="font-size:0.78rem;color:#555;">Amount: $</span>
-        <input type="number" id="cashapp-amount" inputmode="decimal" min="0" step="0.01"
-          style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
-      </div>
+    <div id="cashapp-amount-row" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;justify-content:center;">
+      <span style="font-size:0.78rem;color:#555;">Payment amount: $</span>
+      <input type="number" id="cashapp-amount" inputmode="decimal" min="0" step="0.01"
+        style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
     </div>
+    <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;" onclick="notifyOwner()" id="notify-btn">
+      ✅ Notify Satoru — Unit Ready
+    </button>
     <button class="btn btn-ghost" style="width:100%;margin-top:0.75rem;font-size:0.8rem;" onclick="closeChecklist()">Back to schedule</button>
   </div>
 </div>
@@ -671,7 +674,7 @@ window.login = async function() {
   const { doc, getDoc } = window._fb;
   const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
   if (snap.exists() && snap.data().pin === pin) {
-    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0 };
+    currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0, accessLevel: snap.data().accessLevel || 'limited' };
     showApp();
     return;
   }
@@ -818,9 +821,12 @@ async function getCheckoutSlots() {
   const result = [];
 
   for (const day of days) {
-    const checkouts = [];  // array of {unit, nights}
+    const checkouts = [];  // array of {unit, nights, tbd?}
     const eStatus = classifyDay(icals['E']||[], day);
     const eNights = getNights(icals['E']||[], day);
+
+    // Next day — used to detect TBD (unbooked night after today)
+    const nextDay = new Date(day); nextDay.setDate(day.getDate() + 1);
 
     for (const u of ['A','B','C','F']) {
       const s = classifyDay(icals[u]||[], day);
@@ -833,8 +839,31 @@ async function getCheckoutSlots() {
       if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights });
     }
 
+    // TBD slots — units with no booking today AND no booking starting tomorrow
+    // (unoccupied nights that could get a last-minute booking)
+    const tbd = [];
+    const eNextStatus = classifyDay(icals['E']||[], nextDay);
+    const eActive = eStatus && eStatus !== 'open';
+    for (const u of ['A','B','C','F']) {
+      // Skip if already a confirmed checkout today
+      if (checkouts.find(c => c.unit === u)) continue;
+      const todayStatus = classifyDay(icals[u]||[], day);
+      const nextStatus  = classifyDay(icals[u]||[], nextDay);
+      // Unit is unbooked today (open or null) and unbooked tomorrow
+      const todayFree = !todayStatus || todayStatus === 'open';
+      const nextFree  = !nextStatus  || nextStatus  === 'open';
+      // Skip if E is active and this is A or B (they're combined/unavailable)
+      if (eActive && (u === 'A' || u === 'B')) continue;
+      if (todayFree && nextFree) {
+        // Also skip if E combined would cover A/B tomorrow
+        if ((u === 'A' || u === 'B') && (eNextStatus === 'checkin' || eNextStatus === 'both')) continue;
+        tbd.push({ unit: u });
+      }
+    }
+
     checkouts.sort((a,b) => a.unit.localeCompare(b.unit));
-    result.push({ day, checkouts });
+    tbd.sort((a,b) => a.unit.localeCompare(b.unit));
+    result.push({ day, checkouts, tbd });
   }
   return result;
 }
@@ -913,55 +942,79 @@ async function loadCleanerSchedule() {
 
 function renderCleanerSchedule(slots, claims, container, completedKeys = new Set()) {
   container.innerHTML = '';
-  for (const { day, checkouts } of slots) {
-    // Only show slots that are unclaimed or claimed by me
+  const access = (currentUser && currentUser.accessLevel) || 'limited';
+
+  for (const { day, checkouts, tbd } of slots) {
+    // Limited: only unclaimed or mine
+    // Standard/Full: also show claimed-by-others + TBD
     const visibleSlots = checkouts.filter(({unit}) => {
       const claim = claims[slotKey(day, unit)];
-      return !claim || claim.cleaner === currentUser.name;
+      if (access === 'limited') return !claim || claim.cleaner === currentUser.name;
+      return true; // standard/full see all confirmed slots
     });
+
+    // TBD slots shown to standard and full only
+    const visibleTbd = (access === 'standard' || access === 'full') ? (tbd || []) : [];
+
+    if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
 
     const block = document.createElement('div');
     block.className = 'day-block';
 
     const header = document.createElement('div');
     header.className = 'day-header';
-    header.innerHTML = `<span>${formatDay(day)}</span>${visibleSlots.length===0 ? '<span class="no-clean">No available slots</span>' : ''}`;
+    header.innerHTML = `<span>${formatDay(day)}</span>`;
     block.appendChild(header);
 
-    if (visibleSlots.length > 0) {
-      const slotsDiv = document.createElement('div');
-      slotsDiv.className = 'slots';
+    const slotsDiv = document.createElement('div');
+    slotsDiv.className = 'slots';
 
-      for (const {unit, nights} of visibleSlots) {
-        const key = slotKey(day, unit);
-        const histKey = `${dayKey(day)}_${unit}`;
-        const ciKey = `${dayKey(day)}_${unit}_ci`;
-        const claim = claims[key];
-        const isMe = claim && claim.cleaner === currentUser.name;
-        const isDone = completedKeys.has(histKey);
-        const nightLabel = nights ? `${nights} night${nights===1?'':'s'}` : '';
-        const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
+    // Confirmed checkout slots
+    for (const {unit, nights} of visibleSlots) {
+      const key = slotKey(day, unit);
+      const histKey = `${dayKey(day)}_${unit}`;
+      const ciKey = `${dayKey(day)}_${unit}_ci`;
+      const claim = claims[key];
+      const isMe = claim && claim.cleaner === currentUser.name;
+      const isClaimed = claim && !isMe;
+      const isDone = completedKeys.has(histKey);
+      const nightLabel = nights ? `${nights} night${nights===1?'':'s'}` : '';
+      const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
 
-        const slotEl = document.createElement('div');
-        slotEl.className = `slot ${isDone ? 'claimed-mine' : isMe ? 'claimed-mine' : 'unclaimed'}`;
+      const slotEl = document.createElement('div');
+      slotEl.className = `slot ${isDone ? 'claimed-mine' : isMe ? 'claimed-mine' : isClaimed ? 'claimed-other' : 'unclaimed'}`;
 
-        let rightSide;
-        if (isDone) {
-          rightSide = `<span class="slot-claimer mine" style="font-size:1.1rem;">✅ Done</span>`;
-        } else if (isMe) {
-          rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
-             <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
-        } else {
-          rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
-        }
-
-        slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-          <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · Done by ${doneBy}` : ''}</span>
-          ${rightSide}`;
-        slotsDiv.appendChild(slotEl);
+      let rightSide;
+      if (isDone) {
+        rightSide = `<span class="slot-claimer mine" style="font-size:1.1rem;">✅ Done</span>`;
+      } else if (isMe) {
+        rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
+           <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
+      } else if (isClaimed) {
+        // Full access sees who claimed it; standard just sees "Taken"
+        const label = access === 'full' ? claim.cleaner : 'Taken';
+        rightSide = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
+      } else {
+        rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
       }
-      block.appendChild(slotsDiv);
+
+      slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
+        <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · Done by ${doneBy}` : ''}</span>
+        ${rightSide}`;
+      slotsDiv.appendChild(slotEl);
     }
+
+    // TBD slots
+    for (const {unit} of visibleTbd) {
+      const slotEl = document.createElement('div');
+      slotEl.className = 'slot tbd-slot';
+      slotEl.innerHTML = `<span class="slot-unit" style="color:var(--muted);">Unit ${unit}</span>
+        <span class="slot-label" style="color:var(--muted);">Possible clean</span>
+        <span style="font-size:0.72rem;font-weight:600;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;padding:0.15rem 0.5rem;">TBD</span>`;
+      slotsDiv.appendChild(slotEl);
+    }
+
+    block.appendChild(slotsDiv);
     container.appendChild(block);
   }
 }
@@ -1644,6 +1697,15 @@ async function loadCleanersList() {
             onchange="setCleanerPay('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);width:60px;" />
         </label>
+        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
+          Access
+          <select onchange="setCleanerAccess('${d.id}', this.value)"
+            style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
+            <option value="limited"  ${(data.accessLevel||'limited')==='limited'  ?'selected':''}>Limited</option>
+            <option value="standard" ${(data.accessLevel||'limited')==='standard' ?'selected':''}>Standard</option>
+            <option value="full"     ${(data.accessLevel||'limited')==='full'     ?'selected':''}>Full</option>
+          </select>
+        </label>
         <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>`;
       list.appendChild(row);
     });
@@ -1681,6 +1743,14 @@ window.setCleanerPay = async function(id, val) {
   const snap = await getDoc(doc(db, 'cleaners', id));
   if (snap.exists()) {
     await setDoc(doc(db, 'cleaners', id), { ...snap.data(), pay: parseFloat(val) || 0 });
+  }
+};
+
+window.setCleanerAccess = async function(id, level) {
+  const { doc, setDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', id));
+  if (snap.exists()) {
+    await setDoc(doc(db, 'cleaners', id), { ...snap.data(), accessLevel: level });
   }
 };
 
@@ -1947,9 +2017,7 @@ function updateProgress(unit) {
       const sub = document.getElementById('complete-sub');
       sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.`;
       document.getElementById('notify-btn').textContent = `Notify Satoru — Unit ${clState.unit} Ready`;
-      // Show Cash App button always; pre-fill pay amount if set for this cleaner
-      const cashWrap = document.getElementById('cashapp-wrap');
-      cashWrap.style.display = 'block';
+      // Pre-fill pay amount if set for this cleaner
       const amtInput = document.getElementById('cashapp-amount');
       amtInput.value = (currentUser && currentUser.pay) ? currentUser.pay.toFixed(2) : '';
       document.getElementById('complete-screen').style.display = 'block';
@@ -1957,12 +2025,6 @@ function updateProgress(unit) {
   }
 }
 
-window.requestCashAppPayment = function() {
-  const amount = parseFloat(document.getElementById('cashapp-amount').value) || 0;
-  const amtStr = amount > 0 ? `$${amount.toFixed(2)}` : '';
-  const body = encodeURIComponent(`Hi Satoru! Please send me ${amtStr} on Cash App for cleaning Unit ${clState.unit} on ${clState.date}. Thanks!`);
-  window.location.href = `sms:${OWNER_PHONE}&body=${body}`;
-};
 
 window.notifyOwner = async function() {
   // Write to history collection
@@ -1980,7 +2042,9 @@ window.notifyOwner = async function() {
     });
   } catch(e) { console.error('History write failed:', e); }
 
-  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
+  const amount = parseFloat(document.getElementById('cashapp-amount').value) || 0;
+  const payLine = amount > 0 ? `\nPlease send me $${amount.toFixed(2)} on Cash App. Thanks!` : '';
+  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})${payLine}`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
 
   // After SMS opens, return to home tab and refresh history
