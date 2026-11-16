@@ -873,6 +873,31 @@ async function getCheckoutSlots() {
     tbd.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, checkouts, tbd });
   }
+
+  // Auto-assign: for any real checkout slot that has a TBD pre-claim but no claim yet,
+  // automatically write the claim for the pre-claimer
+  try {
+    const { doc, getDoc, setDoc, deleteDoc } = window._fb;
+    for (const { day, checkouts } of result) {
+      for (const { unit } of checkouts) {
+        const key = slotKey(day, unit);
+        const [claimSnap, tbdSnap] = await Promise.all([
+          getDoc(doc(db, 'claims', key)),
+          getDoc(doc(db, 'tbd_claims', key))
+        ]);
+        if (!claimSnap.exists() && tbdSnap.exists()) {
+          await setDoc(doc(db, 'claims', key), {
+            cleaner: tbdSnap.data().cleaner,
+            date: dayKey(day), unit,
+            claimedAt: new Date().toISOString(),
+            autoAssigned: true
+          });
+          await deleteDoc(doc(db, 'tbd_claims', key));
+        }
+      }
+    }
+  } catch(e) { console.warn('Auto-assign check failed:', e); }
+
   return result;
 }
 
@@ -925,7 +950,13 @@ async function loadCleanerSchedule() {
 
   const { collection, onSnapshot } = window._fb;
   let latestClaims = {};
+  let latestTbdClaims = {};
   let completedKeys = new Set();
+
+  const rerender = () => {
+    renderCleanerSchedule(slots, latestClaims, latestTbdClaims, container, completedKeys);
+    renderHomeTab(slots, latestClaims);
+  };
 
   // Listen for real-time history updates (completed cleans)
   onSnapshot(collection(db, 'history'), histSnap => {
@@ -933,9 +964,7 @@ async function loadCleanerSchedule() {
     histSnap.forEach(d => {
       if (d.data().cleaner === currentUser.name) completedKeys.add(d.id);
     });
-    renderCleanerSchedule(slots, latestClaims, container, completedKeys);
-    renderHomeTab(slots, latestClaims);
-    // Also refresh the Past Cleans list
+    rerender();
     loadMyHistory();
   });
 
@@ -943,32 +972,38 @@ async function loadCleanerSchedule() {
   onSnapshot(collection(db, 'claims'), snap => {
     latestClaims = {};
     snap.forEach(d => { latestClaims[d.id] = d.data(); });
-    renderCleanerSchedule(slots, latestClaims, container, completedKeys);
-    renderHomeTab(slots, latestClaims);
+    rerender();
+  });
+
+  // Listen for TBD pre-claims
+  onSnapshot(collection(db, 'tbd_claims'), snap => {
+    latestTbdClaims = {};
+    snap.forEach(d => { latestTbdClaims[d.id] = d.data(); });
+    rerender();
   });
 }
 
-function renderCleanerSchedule(slots, claims, container, completedKeys = new Set()) {
+function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKeys = new Set()) {
   container.innerHTML = '';
   const access = (currentUser && currentUser.accessLevel) || 'limited';
+  // Tiers that see TBD slots: basic, standard, full
+  const seeTbd = access !== 'limited';
+  // Tiers that see taken slots (not just own): basic, standard, full
+  const seeTaken = access !== 'limited';
 
   for (const { day, checkouts, tbd } of slots) {
-    // Limited: only unclaimed or mine
-    // Standard/Full: also show claimed-by-others + TBD
     const visibleSlots = checkouts.filter(({unit}) => {
       const claim = claims[slotKey(day, unit)];
-      if (access === 'limited') return !claim || claim.cleaner === currentUser.name;
-      return true; // standard/full see all confirmed slots
+      if (!seeTaken) return !claim || claim.cleaner === currentUser.name;
+      return true;
     });
 
-    // TBD slots shown to standard and full only
-    const visibleTbd = (access === 'standard' || access === 'full') ? (tbd || []) : [];
+    const visibleTbd = seeTbd ? (tbd || []) : [];
 
     if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
 
     const block = document.createElement('div');
     block.className = 'day-block';
-
     const header = document.createElement('div');
     header.className = 'day-header';
     header.innerHTML = `<span>${formatDay(day)}</span>`;
@@ -999,8 +1034,8 @@ function renderCleanerSchedule(slots, claims, container, completedKeys = new Set
         rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
            <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
       } else if (isClaimed) {
-        // Full access sees who claimed it; standard just sees "Taken"
-        const label = access === 'full' ? claim.cleaner : 'Taken';
+        // full: show name · standard: "Taken" · basic: "Unavailable"
+        const label = access === 'full' ? claim.cleaner : access === 'standard' ? 'Taken' : 'Unavailable';
         rightSide = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
       } else {
         rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
@@ -1012,13 +1047,31 @@ function renderCleanerSchedule(slots, claims, container, completedKeys = new Set
       slotsDiv.appendChild(slotEl);
     }
 
-    // TBD slots
+    // TBD slots — shown to basic/standard/full, with Claim if Available for all
     for (const {unit} of visibleTbd) {
+      const tbdKey = `${dayKey(day)}_${unit}`;
+      const tbdClaim = tbdClaims[tbdKey];
+      const iMePreClaimed = tbdClaim && tbdClaim.cleaner === currentUser.name;
+      const otherPreClaimed = tbdClaim && !iMePreClaimed;
+
       const slotEl = document.createElement('div');
       slotEl.className = 'slot tbd-slot';
-      slotEl.innerHTML = `<span class="slot-unit" style="color:var(--muted);">Unit ${unit}</span>
+
+      let tbdRight;
+      if (iMePreClaimed) {
+        tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#2a6b4a;">✓ On waitlist</span>
+          <button class="claim-btn unclaim" style="margin-left:0.4rem;" onclick="cancelTbdClaim('${tbdKey}')">Cancel</button>`;
+      } else if (otherPreClaimed && access === 'full') {
+        tbdRight = `<span style="font-size:0.72rem;color:var(--muted);">Waitlisted: ${tbdClaim.cleaner}</span>`;
+      } else if (otherPreClaimed) {
+        tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;padding:0.15rem 0.5rem;">TBD</span>`;
+      } else {
+        tbdRight = `<button class="claim-btn claim" style="font-size:0.68rem;white-space:nowrap;" onclick="claimTbd('${tbdKey}', '${dayKey(day)}', '${unit}')">Claim if Available</button>`;
+      }
+
+      slotEl.innerHTML = `<span class="slot-unit" style="color:#b07d2a;">Unit ${unit}</span>
         <span class="slot-label" style="color:var(--muted);">Possible clean</span>
-        <span style="font-size:0.72rem;font-weight:600;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;padding:0.15rem 0.5rem;">TBD</span>`;
+        ${tbdRight}`;
       slotsDiv.appendChild(slotEl);
     }
 
@@ -1163,13 +1216,50 @@ function showCalendarPrompt() {
   calendarPromptTimer = setTimeout(dismissCalendarPrompt, 60000);
 }
 
-window.claimSlot = async function(key, date, unit) {
-  const { doc, setDoc } = window._fb;
-  await setDoc(doc(db, 'claims', key), {
+window.claimTbd = async function(tbdKey, date, unit) {
+  const { doc, setDoc, getDoc } = window._fb;
+  // First come first served — only write if nobody has pre-claimed yet
+  const existing = await getDoc(doc(db, 'tbd_claims', tbdKey));
+  if (existing.exists()) {
+    alert('Someone already has this on their waitlist.');
+    return;
+  }
+  await setDoc(doc(db, 'tbd_claims', tbdKey), {
     cleaner: currentUser.name,
     date, unit,
     claimedAt: new Date().toISOString()
   });
+};
+
+window.cancelTbdClaim = async function(tbdKey) {
+  const { doc, deleteDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'tbd_claims', tbdKey));
+  if (snap.exists() && snap.data().cleaner === currentUser.name) {
+    await deleteDoc(doc(db, 'tbd_claims', tbdKey));
+  }
+};
+
+window.claimSlot = async function(key, date, unit) {
+  const { doc, setDoc, getDoc, deleteDoc } = window._fb;
+  // Check if someone pre-claimed this TBD slot — if so, auto-assign to them instead
+  const tbdSnap = await getDoc(doc(db, 'tbd_claims', key));
+  const assignTo = (tbdSnap.exists() && tbdSnap.data().cleaner !== currentUser.name)
+    ? null  // don't override a TBD pre-claim that isn't this user
+    : currentUser.name;
+  if (!assignTo) {
+    // Auto-assign to the pre-claimer; this cleaner sees it as taken
+    alert('This slot was pre-claimed by another cleaner from the waitlist.');
+    return;
+  }
+  await setDoc(doc(db, 'claims', key), {
+    cleaner: assignTo,
+    date, unit,
+    claimedAt: new Date().toISOString()
+  });
+  // Clear TBD pre-claim if it was this user's
+  if (tbdSnap.exists() && tbdSnap.data().cleaner === currentUser.name) {
+    await deleteDoc(doc(db, 'tbd_claims', key));
+  }
   // Push notification to Satoru via Ntfy.sh
   try {
     const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -1703,6 +1793,7 @@ async function loadCleanersList() {
           <select onchange="setCleanerAccess('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
             <option value="limited"  ${(data.accessLevel||'limited')==='limited'  ?'selected':''}>Limited</option>
+            <option value="basic"    ${(data.accessLevel||'limited')==='basic'    ?'selected':''}>Basic</option>
             <option value="standard" ${(data.accessLevel||'limited')==='standard' ?'selected':''}>Standard</option>
             <option value="full"     ${(data.accessLevel||'limited')==='full'     ?'selected':''}>Full</option>
           </select>
