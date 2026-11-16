@@ -1778,27 +1778,31 @@ async function loadCleanersList() {
         `<option value="${n}" ${days===n?'selected':''}>${n} days</option>`
       ).join('');
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;gap:0.5rem;';
+      row.style.cssText = 'padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
       row.innerHTML = `
-        <span style="flex:1;font-weight:600;">${data.name}</span>
-        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
-          Window
-          <select onchange="setCleanerWindow('${d.id}', this.value)"
-            style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
-            ${opts}
-          </select>
-        </label>
-        <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
-          Access
-          <select onchange="setCleanerAccess('${d.id}', this.value)"
-            style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
-            <option value="limited"  ${(data.accessLevel||'limited')==='limited'  ?'selected':''}>Limited</option>
-            <option value="basic"    ${(data.accessLevel||'limited')==='basic'    ?'selected':''}>Basic</option>
-            <option value="standard" ${(data.accessLevel||'limited')==='standard' ?'selected':''}>Standard</option>
-            <option value="full"     ${(data.accessLevel||'limited')==='full'     ?'selected':''}>Full</option>
-          </select>
-        </label>
-        <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>`;
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem;">
+          <span style="font-weight:600;">${data.name}</span>
+          <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;">
+          <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
+            Window
+            <select onchange="setCleanerWindow('${d.id}', this.value)"
+              style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
+              ${opts}
+            </select>
+          </label>
+          <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
+            Access
+            <select onchange="setCleanerAccess('${d.id}', this.value)"
+              style="font-family:'DM Mono',monospace;font-size:0.78rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);cursor:pointer;">
+              <option value="limited"  ${(data.accessLevel||'limited')==='limited'  ?'selected':''}>Limited</option>
+              <option value="basic"    ${(data.accessLevel||'limited')==='basic'    ?'selected':''}>Basic</option>
+              <option value="standard" ${(data.accessLevel||'limited')==='standard' ?'selected':''}>Standard</option>
+              <option value="full"     ${(data.accessLevel||'limited')==='full'     ?'selected':''}>Full</option>
+            </select>
+          </label>
+        </div>`;
       list.appendChild(row);
     });
   });
