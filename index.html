@@ -2027,6 +2027,17 @@ async function saveChecklistToFirestore(unit) {
   }));
 }
 
+const FIRST_THINGS_FIRST = {
+  name: '🚀 First Things First',
+  items: [
+    'Strip all beds & remove linens',
+    'Check linens for stains & treat before washing',
+    'Start washing machine',
+    'Check for damage or forgotten guest items',
+    'Open windows for fresh air'
+  ]
+};
+
 async function loadChecklistsFromFirestore() {
   const { collection, getDocs } = window._fb;
   const [checkSnap, photoSnap] = await Promise.all([
@@ -2037,6 +2048,7 @@ async function loadChecklistsFromFirestore() {
   const photoMap = {};
   photoSnap.forEach(d => { photoMap[d.id] = d.data().photos || []; });
 
+  const unitsNeedingSave = [];
   checkSnap.forEach(d => {
     const unit = d.id;
     if (UNIT_CHECKLISTS[unit]) {
@@ -2045,12 +2057,19 @@ async function loadChecklistsFromFirestore() {
         photos: photoMap[`${unit}_${i}`] || [],
         photo: (photoMap[`${unit}_${i}`] || [])[0] || null
       }));
+      // Inject "First Things First" at top if missing
+      if (UNIT_CHECKLISTS[unit].rooms[0]?.name !== FIRST_THINGS_FIRST.name) {
+        UNIT_CHECKLISTS[unit].rooms.unshift({ ...FIRST_THINGS_FIRST, photos: [], photo: null });
+        unitsNeedingSave.push(unit);
+      }
     }
   });
+  // Save back any units that got the new room injected
+  await Promise.all(unitsNeedingSave.map(u => saveChecklistToFirestore(u)));
 }
 
-// Compress image to base64 JPEG under maxKB, targeting maxW px wide
-function compressImage(file, maxW, maxKB) {
+// Compress image to base64 JPEG under maxBytes (actual stored size)
+function compressImage(file, maxW, maxBytes) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = reject;
@@ -2058,7 +2077,7 @@ function compressImage(file, maxW, maxKB) {
       const img = new Image();
       img.onerror = reject;
       img.onload = () => {
-        // Keep reducing size until under maxKB
+        // dataUrl.length ≈ actual stored bytes (base64 adds ~33% but we measure the string directly)
         const tryCompress = (width, quality) => {
           const canvas = document.createElement('canvas');
           const scale = Math.min(1, width / img.width);
@@ -2066,15 +2085,13 @@ function compressImage(file, maxW, maxKB) {
           canvas.height = Math.round(img.height * scale);
           canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
-          // base64 overhead is ~1.37x
-          if (dataUrl.length > maxKB * 1024 * 1.37) {
-            if (quality > 0.25) return tryCompress(width, quality - 0.1);
-            if (width > 400)    return tryCompress(Math.round(width * 0.75), 0.6);
-            // Last resort — return whatever we have
+          if (dataUrl.length > maxBytes) {
+            if (quality > 0.3) return tryCompress(width, Math.round((quality - 0.1) * 10) / 10);
+            if (width > 400)   return tryCompress(Math.round(width * 0.7), 0.6);
           }
           return dataUrl;
         };
-        resolve(tryCompress(maxW, 0.78));
+        resolve(tryCompress(maxW, 0.75));
       };
       img.src = e.target.result;
     };
@@ -2092,7 +2109,7 @@ window.uploadRoomPhotos = async function(unit, roomIdx, input) {
   try {
     for (let i = 0; i < files.length; i++) {
       statusEl.textContent = `Compressing ${i+1}/${files.length}…`;
-      const dataUrl = await compressImage(files[i], 800, 200);
+      const dataUrl = await compressImage(files[i], 800, 120 * 1024);
       room.photos.push(dataUrl);
     }
     room.photo = room.photos[0] || null;
