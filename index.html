@@ -540,10 +540,10 @@ body { padding-bottom: 5rem; }
         <button class="tab" onclick="switchTab('schedule')">Schedule</button>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem;margin-top:-0.25rem;">
-        <div id="lang-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--paper);">
-          <button class="lang-btn" data-lang="en" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.75rem;border:none;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);min-width:44px;min-height:36px;" onclick="window.setLang('en')">EN</button>
-          <span style="display:flex;align-items:center;color:var(--border);pointer-events:none;user-select:none;font-size:0.7rem;">│</span>
-          <button class="lang-btn" data-lang="es" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.75rem;border:none;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);min-width:44px;min-height:36px;" onclick="window.setLang('es')">ES</button>
+        <div id="lang-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;background:var(--paper);">
+          <button id="lang-en" class="lang-btn" data-lang="en" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.75rem;border:none;border-radius:6px 0 0 6px;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);min-width:44px;min-height:44px;">EN</button>
+          <span style="display:flex;align-items:center;color:var(--border);pointer-events:none;user-select:none;font-size:0.7rem;padding:0 1px;">│</span>
+          <button id="lang-es" class="lang-btn" data-lang="es" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.75rem;border:none;border-radius:0 6px 6px 0;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);min-width:44px;min-height:44px;">ES</button>
         </div>
       </div>
 
@@ -962,7 +962,7 @@ async function fetchAllICals() {
 async function getCheckoutSlots() {
   const icals = await fetchAllICals();
   const windowDays = (currentUser && currentUser.scheduleDays) ? currentUser.scheduleDays : 60;
-  const showPast = window._showPastSchedule ? 14 : 0;
+  const showPast = window._showPastSchedule ? 30 : 0;
   const days = getDays(windowDays, showPast);
   const result = [];
 
@@ -1154,9 +1154,19 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
   const access = (currentUser && currentUser.accessLevel) || 'basic';
   // viewonly: assigned slots only, no claiming · basic: open+mine+TBD · standard: all+"Taken" · full: all+names
   const seeTbd = access !== 'viewonly';
+  const today = new Date(); today.setHours(0,0,0,0);
+  let todayAnchorSet = false;
+
   for (const { day, checkouts, tbd } of slots) {
+    const isPastDay = day < today;
+    const isTodayDay = sameDay(day, today);
+
     const visibleSlots = checkouts.filter(({unit}) => {
-      const claim = claims[slotKey(day, unit)];
+      const key = slotKey(day, unit);
+      const histKey = `${dayKey(day)}_${unit}`;
+      const claim = claims[key];
+      // For past days: only show if this cleaner has a claim or completed entry
+      if (isPastDay) return (claim && claim.cleaner === currentUser.name) || completedKeys.has(histKey);
       // viewonly: only slots assigned to me
       if (access === 'viewonly') return claim && claim.cleaner === currentUser.name;
       // basic: only open or mine
@@ -1164,13 +1174,9 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       return true;
     });
 
-    const visibleTbd = seeTbd ? (tbd || []) : [];
+    const visibleTbd = (!isPastDay && seeTbd) ? (tbd || []) : [];
 
     if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
-
-    const today = new Date(); today.setHours(0,0,0,0);
-    const isPastDay = day < today;
-    const isTodayDay = sameDay(day, today);
     const block = document.createElement('div');
     block.className = 'day-block';
     if (isPastDay) block.style.opacity = '0.65';
@@ -1251,8 +1257,16 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
     }
 
     block.appendChild(slotsDiv);
+    // Mark today's block so we can scroll to it
+    if (isTodayDay) block.id = 'today-anchor';
     container.appendChild(block);
   }
+
+  // After rendering, scroll today into view (past days appear above, scroll up to see them)
+  requestAnimationFrame(() => {
+    const anchor = document.getElementById('today-anchor');
+    if (anchor) anchor.scrollIntoView({ behavior: 'instant', block: 'start' });
+  });
 }
 
 // ── Calendar helpers ─────────────────────────────────────
@@ -2385,12 +2399,16 @@ function buildPaymentChecklist() {
     const id = `pay-cb-${i}`;
     const item = document.createElement('label');
     item.style.cssText = 'display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;cursor:pointer;border-bottom:1px solid var(--border);';
-    item.innerHTML = `<input type="checkbox" id="${id}" data-label="${label}" style="width:18px;height:18px;cursor:pointer;touch-action:manipulation;flex-shrink:0;" checked /><span style="font-size:0.8rem;">${label}</span>`;
+    // Dim already-requested items but still allow re-selecting
+    const payBadge = r.paymentRequested
+      ? `<span style="font-size:0.65rem;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;padding:0.1rem 0.35rem;white-space:nowrap;">💵 requested</span>`
+      : (r.paid ? `<span style="font-size:0.65rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.1rem 0.35rem;white-space:nowrap;">✅ paid</span>` : '');
+    item.innerHTML = `<input type="checkbox" id="${id}" data-label="${label}" data-key="${r.key||''}" style="width:18px;height:18px;cursor:pointer;touch-action:manipulation;flex-shrink:0;" ${r.paid ? '' : 'checked'} /><span style="font-size:0.8rem;">${label}</span>${payBadge}`;
     wrap.appendChild(item);
   });
 }
 
-window.sendPaymentRequest = function() {
+window.sendPaymentRequest = async function() {
   const amount = parseFloat(document.getElementById('payment-total').value) || 0;
   if (amount <= 0) {
     alert('Enter a payment amount first.');
@@ -2398,8 +2416,10 @@ window.sendPaymentRequest = function() {
   }
   // Collect selected cleans
   const selected = [];
+  const selectedKeys = [];
   document.querySelectorAll('#payment-checklist input[type=checkbox]:checked').forEach(cb => {
     selected.push(cb.dataset.label);
+    if (cb.dataset.key) selectedKeys.push(cb.dataset.key);
   });
   if (selected.length === 0) {
     alert('Select at least one clean to bill.');
@@ -2410,8 +2430,23 @@ window.sendPaymentRequest = function() {
   const cashAppUrl = `https://cash.app/$${cashtag}/${amount.toFixed(2)}`;
   const lineItems = selected.map(s => `  • ${s}`).join('\n');
   const msgBody = `💰 Payment request from ${cleanerName}\n\n${lineItems}\n\nTotal: $${amount.toFixed(2)}\n\nSend via Cash App:\n${cashAppUrl}`;
+
+  // Mark each selected history doc as paymentRequested in Firestore
+  if (selectedKeys.length > 0) {
+    try {
+      const { doc, updateDoc } = window._fb;
+      await Promise.all(selectedKeys.map(key =>
+        updateDoc(doc(db, 'history', key), {
+          paymentRequested: true,
+          paymentRequestedAt: new Date().toISOString(),
+          paymentAmount: amount
+        })
+      ));
+    } catch(e) { /* non-blocking — SMS still sends */ }
+  }
+
   window.location.href = `sms:${OWNER_PHONE}&body=${encodeURIComponent(msgBody)}`;
-  setTimeout(() => togglePaymentMode(), 500);
+  setTimeout(() => { togglePaymentMode(); loadMyHistory(); }, 600);
 };
 
 // ── Admin History ─────────────────────────────────────────
@@ -2432,7 +2467,7 @@ async function loadAdminHistory() {
 
   // Sort newest first
   const records = [];
-  snap.forEach(d => records.push(d.data()));
+  snap.forEach(d => records.push({ ...d.data(), _key: d.id }));
   records.sort((a,b) => b.date.localeCompare(a.date));
 
   // Group by month
@@ -2451,7 +2486,7 @@ async function loadAdminHistory() {
     block.style.marginBottom = '1rem';
     block.innerHTML = `<div class="card-title" style="margin-bottom:0.5rem;">${label}</div>`;
 
-    for (const r of recs) {
+    for (const [recIdx, r] of recs.entries()) {
       const d = new Date(r.date + 'T12:00:00');
       const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
       const nightLabel = r.nights ? ` · ${r.nights}n` : '';
@@ -2465,20 +2500,43 @@ async function loadAdminHistory() {
         ? `${startedStr} → ${completedStr}`
         : completedStr ? `Done ${completedStr}` : '';
 
+      // Payment status for admin
+      let paySection = '';
+      if (r.paid) {
+        paySection = `<span style="font-size:0.68rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.2rem 0.5rem;">✅ Paid</span>`;
+      } else if (r.paymentRequested) {
+        const reqAmt = r.paymentAmount ? ` $${parseFloat(r.paymentAmount).toFixed(2)}` : '';
+        paySection = `<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
+          <span style="font-size:0.68rem;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;padding:0.2rem 0.5rem;">💵 Requested${reqAmt}</span>
+          <button onclick="adminMarkPaid('${r._key}')" style="font-family:'DM Mono',monospace;font-size:0.65rem;padding:0.2rem 0.5rem;border:1px solid #2a6b4a;border-radius:3px;background:#f0faf4;color:#2a6b4a;cursor:pointer;touch-action:manipulation;white-space:nowrap;">Mark Paid</button>
+        </div>`;
+      }
+
       const row = document.createElement('div');
       row.className = 'card';
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;margin-bottom:0.4rem;';
+      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;margin-bottom:0.4rem;gap:0.5rem;';
       row.innerHTML = `
-        <div>
+        <div style="min-width:0;flex:1;">
           <div style="font-size:0.85rem;font-weight:500;">${dateStr} — Unit ${r.unit}${nightLabel}</div>
           <div style="font-size:0.72rem;color:var(--muted);margin-top:0.15rem;">Cleaned by ${r.cleaner}${timeStr ? ' · ' + timeStr : ''}</div>
         </div>
-        <span style="font-size:1.1rem;">✅</span>`;
+        <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0;">
+          ${paySection || '<span style="font-size:1.1rem;">✅</span>'}
+        </div>`;
       block.appendChild(row);
     }
     content.appendChild(block);
   }
 }
+
+window.adminMarkPaid = async function(key) {
+  if (!key) return;
+  try {
+    const { doc, updateDoc } = window._fb;
+    await updateDoc(doc(db, 'history', key), { paid: true, paidAt: new Date().toISOString() });
+    loadAdminHistory(); // refresh admin view
+  } catch(e) { alert('Could not mark paid: ' + e.message); }
+};
 
 // ── Cleaner past cleans ───────────────────────────────────
 async function loadMyHistory() {
@@ -2507,8 +2565,10 @@ async function loadMyHistory() {
   // Add all completed history entries
   _completedCleans = []; // reset for payment flow
   for (const [key, r] of Object.entries(completed)) {
-    rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done' });
-    _completedCleans.push({ date: r.date, unit: r.unit, nights: r.nights || 0 });
+    rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done', key,
+      paymentRequested: !!r.paymentRequested, paid: !!r.paid });
+    _completedCleans.push({ date: r.date, unit: r.unit, nights: r.nights || 0, key,
+      paymentRequested: !!r.paymentRequested, paid: !!r.paid });
   }
   _completedCleans.sort((a,b) => b.date.localeCompare(a.date));
 
@@ -2551,7 +2611,18 @@ async function loadMyHistory() {
           ${markDoneBtn}
         </div>`;
     } else {
-      row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span><span style="color:var(--green);">✅</span>`;
+      // Payment status badge
+      let payBadge = '';
+      if (r.paid) {
+        payBadge = `<span style="font-size:0.68rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.15rem 0.4rem;">✅ Paid</span>`;
+      } else if (r.paymentRequested) {
+        payBadge = `<span style="font-size:0.68rem;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;padding:0.15rem 0.4rem;">💵 Requested</span>`;
+      }
+      row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
+        <div style="display:flex;align-items:center;gap:0.4rem;">
+          ${payBadge}
+          <span style="color:var(--green);font-size:1rem;">✅</span>
+        </div>`;
     }
     wrap.appendChild(row);
   }
@@ -2586,6 +2657,16 @@ window.markCleanDone = async function(claimKey, unit, date, nights) {
     alert('Could not save: ' + e.message);
   }
 };
+
+// ── Lang button wiring (avoids iOS Safari inline-onclick issues) ─
+document.addEventListener('DOMContentLoaded', function() {
+  const enBtn = document.getElementById('lang-en');
+  const esBtn = document.getElementById('lang-es');
+  if (enBtn) enBtn.addEventListener('touchend', function(e) { e.preventDefault(); window.setLang('en'); }, { passive: false });
+  if (esBtn) esBtn.addEventListener('touchend', function(e) { e.preventDefault(); window.setLang('es'); }, { passive: false });
+  if (enBtn) enBtn.addEventListener('click', function() { window.setLang('en'); });
+  if (esBtn) esBtn.addEventListener('click', function() { window.setLang('es'); });
+});
 
 // ── Init ─────────────────────────────────────────────────
 bootApp();
