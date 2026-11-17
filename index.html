@@ -2237,48 +2237,53 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
 const UNIT_CHECKLISTS = {
   A: {
     rooms: [
+      { name: '🚀 First Things First', photo: null, items: ['Strip all beds & remove linens', 'Check linens for stains & treat before washing', 'Start washing machine', 'Check for damage or forgotten guest items', 'Open windows for fresh air'] },
       { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge'] },
       { name: 'Bathroom', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower/tub', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
-      { name: 'Bedroom', photo: null, items: ['Strip & remake bed with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close all closets'] },
+      { name: 'Bedroom', photo: null, items: ['Remake bed with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close all closets'] },
       { name: 'Living Room', photo: null, items: ['Vacuum sofa & cushions', 'Wipe coffee table', 'Check for forgotten items', 'Straighten décor'] },
       { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off all lights', 'Set thermostat', 'Take out trash bags', 'Lock door & return key'] },
     ]
   },
   B: {
     rooms: [
+      { name: '🚀 First Things First', photo: null, items: ['Strip all beds & remove linens', 'Check linens for stains & treat before washing', 'Start washing machine', 'Check for damage or forgotten guest items', 'Open windows for fresh air'] },
       { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge'] },
       { name: 'Bathroom', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
-      { name: 'Bedroom', photo: null, items: ['Strip & remake bed', 'Dust surfaces', 'Vacuum floor', 'Check under bed'] },
+      { name: 'Bedroom', photo: null, items: ['Remake bed with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed'] },
       { name: 'Living Room', photo: null, items: ['Vacuum sofa', 'Wipe table', 'Check for forgotten items'] },
       { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off lights', 'Set thermostat', 'Take out trash', 'Lock door'] },
     ]
   },
   C: {
     rooms: [
+      { name: '🚀 First Things First', photo: null, items: ['Strip all beds & remove linens', 'Check linens for stains & treat before washing', 'Start washing machine', 'Check for damage or forgotten guest items', 'Open windows for fresh air'] },
       { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge', 'Wipe exterior of fridge'] },
       { name: 'Bathroom 1', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
-      { name: 'Bedroom 1', photo: null, items: ['Strip & remake bed (queen)', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close closets'] },
-      { name: 'Bedroom 2', photo: null, items: ['Strip & remake bed (twin x2)', 'Dust surfaces', 'Vacuum floor'] },
+      { name: 'Bedroom 1', photo: null, items: ['Remake bed (queen) with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close closets'] },
+      { name: 'Bedroom 2', photo: null, items: ['Remake bed (twin x2) with fresh sheets', 'Dust surfaces', 'Vacuum floor'] },
       { name: 'Living Room', photo: null, items: ['Vacuum sofa & cushions', 'Wipe coffee table & TV stand', 'Check for forgotten items', 'Straighten décor'] },
       { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off all lights', 'Set thermostat', 'Take out trash bags', 'Lock door & return key'] },
     ]
   },
   E: {
     rooms: [
+      { name: '🚀 First Things First', photo: null, items: ['Strip all beds & remove linens', 'Check linens for stains & treat before washing', 'Start washing machine', 'Check for damage or forgotten guest items', 'Open windows for fresh air'] },
       { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock supplies', 'Clean microwave inside'] },
       { name: 'Bathroom 1', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower/tub', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
       { name: 'Bathroom 2', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
-      { name: 'Bedroom 1', photo: null, items: ['Strip & remake bed (king)', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close closets'] },
-      { name: 'Bedroom 2', photo: null, items: ['Strip & remake bed', 'Dust surfaces', 'Vacuum floor'] },
+      { name: 'Bedroom 1', photo: null, items: ['Remake bed (king) with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed', 'Close closets'] },
+      { name: 'Bedroom 2', photo: null, items: ['Remake bed with fresh sheets', 'Dust surfaces', 'Vacuum floor'] },
       { name: 'Living Room', photo: null, items: ['Vacuum all furniture', 'Wipe coffee table', 'Check for forgotten items', 'Straighten décor', 'Check balcony'] },
       { name: 'Final Check', photo: null, items: ['Lock windows & balcony door', 'Turn off all lights & fans', 'Set thermostat', 'Take out all trash', 'Lock door & return key'] },
     ]
   },
   F: {
     rooms: [
+      { name: '🚀 First Things First', photo: null, items: ['Strip all beds & remove linens', 'Check linens for stains & treat before washing', 'Start washing machine', 'Check for damage or forgotten guest items', 'Open windows for fresh air'] },
       { name: 'Kitchen', photo: null, items: ['Empty dishwasher / rewash dishes', 'Wipe counters & stovetop', 'Clean sink', 'Empty trash & reline', 'Restock dish soap, sponge'] },
       { name: 'Bathroom', photo: null, items: ['Scrub toilet', 'Clean sink & mirror', 'Wipe shower', 'Replace towels', 'Empty trash', 'Restock toiletries'] },
-      { name: 'Bedroom', photo: null, items: ['Strip & remake bed', 'Dust surfaces', 'Vacuum floor', 'Check under bed'] },
+      { name: 'Bedroom', photo: null, items: ['Remake bed with fresh sheets', 'Dust surfaces', 'Vacuum floor', 'Check under bed'] },
       { name: 'Living Room', photo: null, items: ['Vacuum sofa', 'Wipe table', 'Check for forgotten items', 'Straighten décor'] },
       { name: 'Final Check', photo: null, items: ['Lock windows', 'Turn off lights', 'Set thermostat', 'Take out trash', 'Lock door'] },
     ]
