@@ -483,8 +483,8 @@ body { padding-bottom: 5rem; }
   <!-- Cleanliness rating screen shown before checklist -->
   <div class="complete-screen" id="rating-screen" style="display:none;">
     <div class="complete-icon">🏠</div>
-    <div class="complete-title">How did guests leave it?</div>
-    <div style="font-size:0.8rem;color:var(--muted);margin-bottom:1.5rem;">Rate guest cleanliness before you start</div>
+    <div class="complete-title" id="rating-title">How did guests leave it?</div>
+    <div id="rating-sub" style="font-size:0.8rem;color:var(--muted);margin-bottom:1.5rem;">Rate guest cleanliness before you start</div>
     <div id="star-row" style="display:flex;justify-content:center;gap:0.6rem;margin-bottom:1rem;">
       <button class="star-btn" onclick="selectRating(1)" data-star="1">★</button>
       <button class="star-btn" onclick="selectRating(2)" data-star="2">★</button>
@@ -499,17 +499,17 @@ body { padding-bottom: 5rem; }
   <!-- Completion screen shown inside checklist -->
   <div class="complete-screen" id="complete-screen">
     <div class="complete-icon">✅</div>
-    <div class="complete-title">All done!</div>
+    <div class="complete-title" id="complete-title">All done!</div>
     <div class="complete-sub" id="complete-sub">Unit C is clean and ready for check-in.</div>
     <div id="cashapp-amount-row" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;justify-content:center;">
-      <span style="font-size:0.78rem;color:#555;">Payment amount: $</span>
+      <span id="payment-label" style="font-size:0.78rem;color:#555;">Payment amount: $</span>
       <input type="number" id="cashapp-amount" inputmode="decimal" min="0" step="0.01"
         style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
     </div>
     <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;touch-action:manipulation;" onclick="notifyOwner()" id="notify-btn">
       ✅ Notify Satoru — Unit Ready
     </button>
-    <button class="btn btn-ghost" style="width:100%;margin-top:0.75rem;font-size:0.8rem;touch-action:manipulation;" onclick="closeChecklist()">Back to schedule</button>
+    <button class="btn btn-ghost" id="back-to-schedule-btn" style="width:100%;margin-top:0.75rem;font-size:0.8rem;touch-action:manipulation;" onclick="closeChecklist()">Back to schedule</button>
   </div>
 </div>
 
@@ -540,9 +540,16 @@ body { padding-bottom: 5rem; }
     <!-- Cleaner view -->
     <div id="cleaner-view">
 
-      <div class="tabs" id="cleaner-tabs">
-        <button class="tab active" onclick="switchTab('home')">Home</button>
-        <button class="tab" onclick="switchTab('schedule')">Schedule</button>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem;">
+        <div class="tabs" id="cleaner-tabs" style="margin-bottom:0;">
+          <button class="tab active" onclick="switchTab('home')">Home</button>
+          <button class="tab" onclick="switchTab('schedule')">Schedule</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.15rem;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.3rem;background:var(--paper);">
+          <button class="lang-btn" data-lang="en" onclick="setLang('en')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.1rem 0.25rem;">EN</button>
+          <span style="color:var(--border);">|</span>
+          <button class="lang-btn" data-lang="es" onclick="setLang('es')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.1rem 0.25rem;">ES</button>
+        </div>
       </div>
 
       <!-- Home tab -->
@@ -637,6 +644,109 @@ const ADMIN_PINS = { '7553': 'Satoru', '1225': 'Atsuko' };
 
 let db, currentUser = null;
 
+// ── Language / i18n ───────────────────────────────────────
+let appLang = localStorage.getItem('appLang') || 'en';
+const TRANSLATIONS = {
+  en: {
+    signIn: 'Sign In', signOut: 'Sign out', yourName: 'Your name', pin: 'PIN',
+    nameAndPin: 'Enter name and PIN.', notRecognized: 'Name or PIN not recognized.',
+    home: 'Home', schedule: 'Schedule',
+    nextClean: 'Your next clean', upcomingCleans: 'Your upcoming cleans',
+    pastCleans: 'Past cleans', noUpcoming: 'No upcoming cleans claimed yet. Go to Schedule to claim a slot.',
+    noneClaimed: 'None claimed yet.', noHistory: 'No completed cleans yet.',
+    today: 'Today', available: 'Available', yourClaim: 'Your claim',
+    claimed: '✓ Claimed', assigned: '✓ Assigned', release: 'Release',
+    taken: 'Taken', unavailable: 'Unavailable',
+    claim: 'Claim', checklist: 'Checklist', resume: 'Resume', inProgress: 'In progress',
+    openChecklist: 'Open cleaning checklist →', doneBy: 'Done by',
+    tbdTitle: 'TBD — Not booked yet', claimIfAvailable: 'Claim if Available',
+    onWaitlist: '✓ On waitlist', cancel: 'Cancel',
+    allDone: 'All done!', unitReady: (u) => `Unit ${u} is clean and ready for check-in.`,
+    notifyBtn: (u) => `Notify Satoru — Unit ${u} Ready`,
+    paymentAmount: 'Payment amount: $', backToSchedule: 'Back to schedule',
+    guestCleanliness: 'Guest cleanliness?', rateBeforeStart: 'Rate guest cleanliness before you start', skip: 'Skip',
+    loadingSchedule: 'Loading schedule…', loadingHistory: 'Loading…',
+    admin: 'Admin', cleaner: 'Cleaner',
+  },
+  es: {
+    signIn: 'Iniciar sesión', signOut: 'Cerrar sesión', yourName: 'Tu nombre', pin: 'PIN',
+    nameAndPin: 'Ingresa nombre y PIN.', notRecognized: 'Nombre o PIN no reconocido.',
+    home: 'Inicio', schedule: 'Horario',
+    nextClean: 'Tu próxima limpieza', upcomingCleans: 'Tus próximas limpiezas',
+    pastCleans: 'Limpiezas pasadas', noUpcoming: 'No tienes limpiezas asignadas. Ve a Horario para reclamar un turno.',
+    noneClaimed: 'Ninguna reclamada aún.', noHistory: 'No hay limpiezas completadas aún.',
+    today: 'Hoy', available: 'Disponible', yourClaim: 'Tu turno',
+    claimed: '✓ Reclamado', assigned: '✓ Asignado', release: 'Liberar',
+    taken: 'Ocupado', unavailable: 'No disponible',
+    claim: 'Reclamar', checklist: 'Lista', resume: 'Continuar', inProgress: 'En progreso',
+    openChecklist: 'Abrir lista de limpieza →', doneBy: 'Listo antes de',
+    tbdTitle: 'Por definir — Sin reserva', claimIfAvailable: 'Reclamar si se confirma',
+    onWaitlist: '✓ En lista de espera', cancel: 'Cancelar',
+    allDone: '¡Todo listo!', unitReady: (u) => `La unidad ${u} está limpia y lista para el check-in.`,
+    notifyBtn: (u) => `Notificar a Satoru — Unidad ${u} lista`,
+    paymentAmount: 'Monto de pago: $', backToSchedule: 'Volver al horario',
+    guestCleanliness: '¿Limpieza del huésped?', rateBeforeStart: 'Califica la limpieza antes de empezar', skip: 'Omitir',
+    loadingSchedule: 'Cargando horario…', loadingHistory: 'Cargando…',
+    admin: 'Admin', cleaner: 'Limpiador/a',
+  }
+};
+function t(key, ...args) {
+  const val = (TRANSLATIONS[appLang] || TRANSLATIONS.en)[key] || (TRANSLATIONS.en)[key] || key;
+  return typeof val === 'function' ? val(...args) : val;
+}
+function setLang(lang) {
+  appLang = lang;
+  try { localStorage.setItem('appLang', lang); } catch(e) {}
+  applyLang();
+}
+function applyLang() {
+  // Login card
+  const nameEl = document.getElementById('login-name');
+  const pinEl = document.getElementById('login-pin');
+  const signInBtn = document.querySelector('#login-card .btn-primary');
+  if (nameEl) nameEl.placeholder = t('yourName');
+  if (pinEl) pinEl.placeholder = t('pin');
+  if (signInBtn) signInBtn.textContent = t('signIn');
+  // User bar sign out
+  const signOutBtn = document.querySelector('#user-bar .btn-ghost');
+  if (signOutBtn) signOutBtn.textContent = t('signOut');
+  // Tabs
+  const tabs = document.querySelectorAll('#cleaner-tabs .tab');
+  if (tabs[0]) tabs[0].textContent = t('home');
+  if (tabs[1]) tabs[1].textContent = t('schedule');
+  // Card titles
+  const cardTitles = document.querySelectorAll('#tab-home .card-title');
+  if (cardTitles[0]) cardTitles[0].textContent = t('upcomingCleans');
+  if (cardTitles[1]) cardTitles[1].textContent = t('pastCleans');
+  // Lang toggle buttons
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.style.fontWeight = btn.dataset.lang === appLang ? '700' : '400';
+    btn.style.color = btn.dataset.lang === appLang ? 'var(--ink)' : 'var(--muted)';
+  });
+  // Loading text
+  const schedLoading = document.getElementById('schedule-loading');
+  if (schedLoading && schedLoading.style.display !== 'none') schedLoading.querySelector('span:last-child') && (schedLoading.textContent = t('loadingSchedule'));
+  const histLoading = document.getElementById('my-history-list');
+  if (histLoading && histLoading.textContent === 'Loading...') histLoading.textContent = t('loadingHistory');
+  // Role label
+  const barRole = document.getElementById('bar-role');
+  if (barRole && currentUser) barRole.textContent = ` · ${currentUser.role === 'admin' ? t('admin') : t('cleaner')}`;
+  // Complete screen
+  const completeTitle = document.getElementById('complete-title');
+  if (completeTitle) completeTitle.textContent = t('allDone');
+  const paymentLabel = document.getElementById('payment-label');
+  if (paymentLabel) paymentLabel.textContent = t('paymentAmount');
+  const backBtn = document.getElementById('back-to-schedule-btn');
+  if (backBtn) backBtn.textContent = t('backToSchedule');
+  const notifyBtn = document.getElementById('notify-btn');
+  if (notifyBtn && clState && clState.unit) notifyBtn.textContent = `✅ ${t('notifyBtn', clState.unit)}`;
+  // Rating screen
+  const ratingTitle = document.getElementById('rating-title');
+  if (ratingTitle) ratingTitle.textContent = t('guestCleanliness');
+  const ratingSub = document.getElementById('rating-sub');
+  if (ratingSub) ratingSub.textContent = t('rateBeforeStart');
+}
+
 async function initFirebase(config) {
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
   const { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, onSnapshot, query, where }
@@ -654,6 +764,7 @@ async function bootApp() {
     await initFirebase(FIREBASE_CONFIG);
     await Promise.all([loadChecklistsFromFirestore(), loadCheckinTimes()]);
     document.getElementById('login-card').style.display = 'block';
+    applyLang(); // Apply saved language preference to login screen
     // Hide bottom nav on login screen so it doesn't cover the Sign In button
     const bottomNav = document.querySelector('.bottom-nav');
     if (bottomNav) bottomNav.style.display = 'none';
@@ -671,7 +782,7 @@ window.login = async function() {
   const name = document.getElementById('login-name').value.trim();
   const pin  = document.getElementById('login-pin').value.trim();
   const statusEl = document.getElementById('login-status');
-  if (!name || !pin) { statusEl.textContent = 'Enter name and PIN.'; statusEl.className='status error'; return; }
+  if (!name || !pin) { statusEl.textContent = t('nameAndPin'); statusEl.className='status error'; return; }
 
   // Cleaner check first — a cleaner record always wins, even if PIN matches admin
   const { doc, getDoc } = window._fb;
@@ -689,7 +800,7 @@ window.login = async function() {
     return;
   }
 
-  statusEl.textContent = 'Name or PIN not recognized.';
+  statusEl.textContent = t('notRecognized');
   statusEl.className = 'status error';
 };
 
@@ -713,7 +824,8 @@ function showApp() {
   const bar = document.getElementById('user-bar');
   bar.style.display = 'flex';
   document.getElementById('bar-name').textContent = currentUser.name;
-  document.getElementById('bar-role').textContent = currentUser.role === 'admin' ? ' · Admin' : ' · Cleaner';
+  document.getElementById('bar-role').textContent = currentUser.role === 'admin' ? ` · ${t('admin')}` : ` · ${t('cleaner')}`;
+  applyLang();
   document.getElementById('app').style.display = 'block';
 
   if (currentUser.role === 'admin') {
@@ -1052,22 +1164,20 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
         rightSide = `<span class="slot-claimer mine" style="font-size:1.1rem;">✅ Done</span>`;
       } else if (isMe) {
         if (access === 'viewonly') {
-          // View-only: show assigned badge + checklist button, no release
-          rightSide = `<span class="slot-claimer mine">✓ Assigned</span>`;
+          rightSide = `<span class="slot-claimer mine">${t('assigned')}</span>`;
         } else {
-          rightSide = `<span class="slot-claimer mine">✓ Claimed</span>
-             <button class="claim-btn unclaim" onclick="unclaim('${key}')">Release</button>`;
+          rightSide = `<span class="slot-claimer mine">${t('claimed')}</span>
+             <button class="claim-btn unclaim" onclick="unclaim('${key}')">${t('release')}</button>`;
         }
       } else if (isClaimed) {
-        // full: show name · standard: "Taken"
-        const label = access === 'full' ? claim.cleaner : 'Taken';
+        const label = access === 'full' ? claim.cleaner : t('taken');
         rightSide = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
       } else {
-        rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">Claim</button>`;
+        rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">${t('claim')}</button>`;
       }
 
       slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-        <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · Done by ${doneBy}` : ''}</span>
+        <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · ${t('doneBy')} ${doneBy}` : ''}</span>
         ${rightSide}`;
       slotsDiv.appendChild(slotEl);
     }
@@ -1084,18 +1194,18 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
 
       let tbdRight;
       if (iMePreClaimed) {
-        tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#2a6b4a;">✓ On waitlist</span>
-          <button class="claim-btn unclaim" style="margin-left:0.4rem;" onclick="cancelTbdClaim('${tbdKey}')">Cancel</button>`;
+        tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#2a6b4a;">${t('onWaitlist')}</span>
+          <button class="claim-btn unclaim" style="margin-left:0.4rem;" onclick="cancelTbdClaim('${tbdKey}')">${t('cancel')}</button>`;
       } else if (otherPreClaimed && access === 'full') {
         tbdRight = `<span style="font-size:0.72rem;color:var(--muted);">Waitlisted: ${tbdClaim.cleaner}</span>`;
       } else if (otherPreClaimed) {
         tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;padding:0.15rem 0.5rem;">TBD</span>`;
       } else {
-        tbdRight = `<button class="claim-btn claim" style="font-size:0.68rem;white-space:nowrap;" onclick="claimTbd('${tbdKey}', '${dayKey(day)}', '${unit}')">Claim if Available</button>`;
+        tbdRight = `<button class="claim-btn claim" style="font-size:0.68rem;white-space:nowrap;" onclick="claimTbd('${tbdKey}', '${dayKey(day)}', '${unit}')">${t('claimIfAvailable')}</button>`;
       }
 
       slotEl.innerHTML = `<span class="slot-unit" style="color:#b07d2a;">Unit ${unit}</span>
-        <span class="slot-label" style="color:var(--muted);">Possible clean</span>
+        <span class="slot-label" style="color:var(--muted);">${t('tbdTitle')}</span>
         ${tbdRight}`;
       slotsDiv.appendChild(slotEl);
     }
@@ -1414,7 +1524,7 @@ function renderAdminSchedule(slots, claims, container, completedKeys = new Set()
     const header = document.createElement('div');
     header.className = 'day-header';
     header.style.fontWeight = isToday ? '600' : '';
-    header.innerHTML = `<span>${formatDay(day)}${isToday ? ' <span style="color:var(--accent);">· Today</span>' : ''}</span>`;
+    header.innerHTML = `<span>${formatDay(day)}${isToday ? ` <span style="color:var(--accent);">· ${t('today')}</span>` : ''}</span>`;
     block.appendChild(header);
 
     const grid = document.createElement('div');
@@ -1921,21 +2031,21 @@ function renderHomeTab(slots, claims) {
   const area = document.getElementById('next-clean-area');
   area.innerHTML = '';
   if (mySlots.length === 0) {
-    area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">No upcoming cleans claimed yet. Go to Schedule to claim a slot.</div></div>`;
+    area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">${t('noUpcoming')}</div></div>`;
   } else {
     const { day, unit, nights } = mySlots[0];
     const isToday = sameDay(day, new Date());
-    const dateLabel = isToday ? 'Today' : formatDay(day);
+    const dateLabel = isToday ? t('today') : formatDay(day);
     const nightLabel = nights ? ` · ${nights} night${nights===1?'':'s'}` : '';
     const ciKey = `${dayKey(day)}_${unit}_ci`;
     const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
     area.innerHTML = `
       <div class="next-clean-card">
-        <div class="next-clean-label">Your next clean</div>
+        <div class="next-clean-label">${t('nextClean')}</div>
         <div class="next-clean-date">${dateLabel}</div>
-        <div class="next-clean-unit">Unit ${unit}${nightLabel} · Done by ${doneBy}</div>
+        <div class="next-clean-unit">Unit ${unit}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
         <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">
-          Open cleaning checklist →
+          ${t('openChecklist')}
         </button>
       </div>`;
   }
@@ -1943,7 +2053,7 @@ function renderHomeTab(slots, claims) {
   // My claims list
   const list = document.getElementById('my-claims-list');
   if (mySlots.length === 0) {
-    list.textContent = 'None claimed yet.';
+    list.textContent = t('noneClaimed');
     return;
   }
   list.innerHTML = '';
@@ -1951,10 +2061,10 @@ function renderHomeTab(slots, claims) {
     const isToday = sameDay(day, new Date());
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);';
-    const dateLabel = isToday ? '<span style="color:var(--accent);font-weight:500;">Today</span>' : formatDay(day);
+    const dateLabel = isToday ? `<span style="color:var(--accent);font-weight:500;">${t('today')}</span>` : formatDay(day);
     const nightLabel = nights ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
     row.innerHTML = `<span>${dateLabel} — Unit ${unit}${nightLabel}</span>
-      <button style="font-family:\'DM Mono\',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">Checklist</button>`;
+      <button style="font-family:\'DM Mono\',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">${t('checklist')}</button>`;
     list.appendChild(row);
   }
 }
@@ -2150,8 +2260,11 @@ function updateProgress(unit) {
     setTimeout(() => {
       document.getElementById('cl-body').style.display = 'none';
       const sub = document.getElementById('complete-sub');
-      sub.textContent = `Unit ${clState.unit} is clean and ready for check-in.`;
-      document.getElementById('notify-btn').textContent = `Notify Satoru — Unit ${clState.unit} Ready`;
+      sub.textContent = t('unitReady', clState.unit);
+      document.getElementById('complete-title').textContent = t('allDone');
+      document.getElementById('notify-btn').textContent = `✅ ${t('notifyBtn', clState.unit)}`;
+      document.getElementById('payment-label').textContent = t('paymentAmount');
+      document.getElementById('back-to-schedule-btn').textContent = t('backToSchedule');
       // Leave amount blank — cleaner fills in manually each time
       document.getElementById('cashapp-amount').value = '';
       document.getElementById('complete-screen').style.display = 'block';
@@ -2309,7 +2422,7 @@ async function loadMyHistory() {
   const wrap = document.getElementById('my-history-list');
   if (!wrap) return;
   if (rows.length === 0) {
-    wrap.innerHTML = '<span style="color:var(--muted);font-size:0.82rem;">No completed cleans yet.</span>';
+    wrap.innerHTML = `<span style="color:var(--muted);font-size:0.82rem;">${t('noHistory')}</span>`;
     return;
   }
   wrap.innerHTML = '';
@@ -2322,9 +2435,9 @@ async function loadMyHistory() {
     if (r.status === 'in-progress') {
       row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
         <div style="display:flex;align-items:center;gap:0.5rem;">
-          <span style="color:var(--accent);font-size:0.72rem;">In progress</span>
+          <span style="color:var(--accent);font-size:0.72rem;">${t('inProgress')}</span>
           <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;"
-            onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">Resume</button>
+            onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">${t('resume')}</button>
         </div>`;
     } else {
       row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span><span style="color:var(--green);">✅</span>`;
