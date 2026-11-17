@@ -545,10 +545,10 @@ body { padding-bottom: 5rem; }
           <button class="tab active" onclick="switchTab('home')">Home</button>
           <button class="tab" onclick="switchTab('schedule')">Schedule</button>
         </div>
-        <div style="display:flex;align-items:center;gap:0.15rem;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.15rem 0.3rem;background:var(--paper);">
-          <button class="lang-btn" data-lang="en" onclick="setLang('en')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.1rem 0.25rem;">EN</button>
-          <span style="color:var(--border);">|</span>
-          <button class="lang-btn" data-lang="es" onclick="setLang('es')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.1rem 0.25rem;">ES</button>
+        <div style="display:flex;align-items:center;gap:0rem;font-size:0.72rem;border:1px solid var(--border);border-radius:5px;overflow:hidden;background:var(--paper);">
+          <button class="lang-btn" data-lang="en" onclick="setLang('en')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.35rem 0.65rem;min-width:38px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">EN</button>
+          <span style="color:var(--border);pointer-events:none;user-select:none;">|</span>
+          <button class="lang-btn" data-lang="es" onclick="setLang('es')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.35rem 0.65rem;min-width:38px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">ES</button>
         </div>
       </div>
 
@@ -698,6 +698,11 @@ function setLang(lang) {
   appLang = lang;
   try { localStorage.setItem('appLang', lang); } catch(e) {}
   applyLang();
+  // Re-render dynamic content so translated strings show immediately
+  if (typeof loadCleanerSchedule === 'function' && currentUser) {
+    loadCleanerSchedule();
+    if (typeof loadMyHistory === 'function') loadMyHistory();
+  }
 }
 function applyLang() {
   // Login card
