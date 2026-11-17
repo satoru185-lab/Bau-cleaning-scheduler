@@ -535,15 +535,15 @@ body { padding-bottom: 5rem; }
     <!-- Cleaner view -->
     <div id="cleaner-view">
 
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem;">
-        <div class="tabs" id="cleaner-tabs" style="margin-bottom:0;">
-          <button class="tab active" onclick="switchTab('home')">Home</button>
-          <button class="tab" onclick="switchTab('schedule')">Schedule</button>
-        </div>
-        <div style="display:flex;align-items:center;gap:0rem;font-size:0.72rem;border:1px solid var(--border);border-radius:5px;overflow:hidden;background:var(--paper);">
-          <button class="lang-btn" data-lang="en" onclick="setLang('en')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.35rem 0.65rem;min-width:38px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">EN</button>
-          <span style="color:var(--border);pointer-events:none;user-select:none;">|</span>
-          <button class="lang-btn" data-lang="es" onclick="setLang('es')" style="background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.35rem 0.65rem;min-width:38px;touch-action:manipulation;-webkit-tap-highlight-color:transparent;">ES</button>
+      <div class="tabs" id="cleaner-tabs">
+        <button class="tab active" onclick="switchTab('home')">Home</button>
+        <button class="tab" onclick="switchTab('schedule')">Schedule</button>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem;margin-top:-0.25rem;">
+        <div id="lang-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--paper);">
+          <button class="lang-btn" data-lang="en" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.75rem;border:none;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);min-width:44px;min-height:36px;" onclick="window.setLang('en')">EN</button>
+          <span style="display:flex;align-items:center;color:var(--border);pointer-events:none;user-select:none;font-size:0.7rem;">│</span>
+          <button class="lang-btn" data-lang="es" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.75rem;border:none;background:none;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);min-width:44px;min-height:36px;" onclick="window.setLang('es')">ES</button>
         </div>
       </div>
 
@@ -577,9 +577,12 @@ body { padding-bottom: 5rem; }
 
       <!-- Schedule tab -->
       <div id="tab-schedule" style="display:none;">
-        <div class="legend">
-          <div class="legend-item"><div class="legend-dot" style="background:var(--unclaimed);border:1px solid #e0c060;"></div> Available</div>
-          <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> Your claim</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.3rem;">
+          <div class="legend" style="margin-bottom:0;">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--unclaimed);border:1px solid #e0c060;"></div> Available</div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--mine);border:1px solid var(--mine-border);"></div> Your claim</div>
+          </div>
+          <button id="past-toggle-btn" onclick="togglePastSchedule()" style="font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.3rem 0.65rem;border:1px solid var(--border);border-radius:5px;background:var(--paper);cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);">⬆ Show past</button>
         </div>
         <div id="schedule-loading" class="loading"><span class="spinner"></span>Loading schedule...</div>
         <div id="schedule-container"></div>
@@ -910,10 +913,10 @@ function classifyDay(events, day) {
   return result;
 }
 
-function getDays(n=28) {
+function getDays(n=28, pastDays=0) {
   const days = [];
   const start = new Date(); start.setHours(0,0,0,0);
-  for (let i = 0; i < n; i++) {
+  for (let i = -pastDays; i < n; i++) {
     const d = new Date(start); d.setDate(start.getDate() + i);
     days.push(d);
   }
@@ -959,7 +962,8 @@ async function fetchAllICals() {
 async function getCheckoutSlots() {
   const icals = await fetchAllICals();
   const windowDays = (currentUser && currentUser.scheduleDays) ? currentUser.scheduleDays : 60;
-  const days = getDays(windowDays);
+  const showPast = window._showPastSchedule ? 14 : 0;
+  const days = getDays(windowDays, showPast);
   const result = [];
 
   for (const day of days) {
@@ -1092,6 +1096,15 @@ async function getFullSchedule() {
   return result;
 }
 
+window._showPastSchedule = false;
+window.togglePastSchedule = function() {
+  window._showPastSchedule = !window._showPastSchedule;
+  const btn = document.getElementById('past-toggle-btn');
+  if (btn) btn.textContent = window._showPastSchedule ? '⬆ Hide past' : '⬆ Show past';
+  _icalCache = null; // force re-fetch so getDays picks up new range
+  loadCleanerSchedule();
+};
+
 // ── Cleaner view ─────────────────────────────────────────
 async function loadCleanerSchedule() {
   const container = document.getElementById('schedule-container');
@@ -1155,11 +1168,17 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
 
     if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
 
+    const today = new Date(); today.setHours(0,0,0,0);
+    const isPastDay = day < today;
+    const isTodayDay = sameDay(day, today);
     const block = document.createElement('div');
     block.className = 'day-block';
+    if (isPastDay) block.style.opacity = '0.65';
     const header = document.createElement('div');
     header.className = 'day-header';
-    header.innerHTML = `<span>${formatDay(day)}</span>`;
+    const todayBadge = isTodayDay ? ` <span style="color:var(--accent);font-weight:600;">· Today</span>` : '';
+    const pastBadge = isPastDay ? ` <span style="color:var(--muted);font-size:0.65rem;">past</span>` : '';
+    header.innerHTML = `<span>${formatDay(day)}${todayBadge}${pastBadge}</span>`;
     block.appendChild(header);
 
     const slotsDiv = document.createElement('div');
@@ -1174,7 +1193,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       const isMe = claim && claim.cleaner === currentUser.name;
       const isClaimed = claim && !isMe;
       const isDone = completedKeys.has(histKey);
-      const nightLabel = nights ? `${nights} night${nights===1?'':'s'}` : '';
+      const nightLabel = (nights && access === 'full') ? `${nights} night${nights===1?'':'s'}` : '';
       const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
 
       const slotEl = document.createElement('div');
@@ -2057,7 +2076,8 @@ function renderHomeTab(slots, claims) {
     const { day, unit, nights } = mySlots[0];
     const isToday = sameDay(day, new Date());
     const dateLabel = isToday ? t('today') : formatDay(day);
-    const nightLabel = nights ? ` · ${nights} night${nights===1?'':'s'}` : '';
+    const _acc = (currentUser && currentUser.accessLevel) || 'basic';
+    const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
     const ciKey = `${dayKey(day)}_${unit}_ci`;
     const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
     area.innerHTML = `
@@ -2083,7 +2103,7 @@ function renderHomeTab(slots, claims) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);';
     const dateLabel = isToday ? `<span style="color:var(--accent);font-weight:500;">${t('today')}</span>` : formatDay(day);
-    const nightLabel = nights ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
+    const nightLabel = (nights && _acc === 'full') ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
     row.innerHTML = `<span>${dateLabel} — Unit ${unit}${nightLabel}</span>
       <button style="font-family:\'DM Mono\',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">${t('checklist')}</button>`;
     list.appendChild(row);
@@ -2359,7 +2379,8 @@ function buildPaymentChecklist() {
   _completedCleans.slice(0, 15).forEach((r, i) => {
     const d = new Date(r.date + 'T12:00:00');
     const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-    const nightLabel = r.nights ? ` · ${r.nights}n` : '';
+    const _payAcc = (currentUser && currentUser.accessLevel) || 'basic';
+    const nightLabel = (r.nights && _payAcc === 'full') ? ` · ${r.nights}n` : '';
     const label = `${dateStr} — Unit ${r.unit}${nightLabel}`;
     const id = `pay-cb-${i}`;
     const item = document.createElement('label');
@@ -2513,7 +2534,8 @@ async function loadMyHistory() {
   for (const r of rows.slice(0, 20)) {
     const d = new Date(r.date + 'T12:00:00');
     const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-    const nightLabel = r.nights ? ` · ${r.nights} night${r.nights===1?'':'s'}` : '';
+    const _histAcc = (currentUser && currentUser.accessLevel) || 'basic';
+    const nightLabel = (r.nights && _histAcc === 'full') ? ` · ${r.nights} night${r.nights===1?'':'s'}` : '';
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
     if (r.status === 'in-progress') {
