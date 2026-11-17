@@ -200,18 +200,25 @@ h1 span { font-style: italic; color: var(--accent); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Tabs */
-.tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+.tabs { display: flex; gap: 0; margin-bottom: 1.25rem; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; border-bottom: 1px solid var(--border); }
+.tabs::-webkit-scrollbar { display: none; }
 .tab {
   font-family: 'DM Mono', monospace;
-  font-size: 0.75rem;
-  padding: 0.4rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: 3px;
+  font-size: 0.72rem;
+  padding: 0.5rem 0.8rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   cursor: pointer;
-  background: var(--paper);
+  background: none;
   color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color 0.15s;
+  margin-bottom: -1px;
 }
-.tab.active { background: var(--ink); color: white; border-color: var(--ink); }
+.tab:hover { color: var(--ink); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
 
 .legend { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
 .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; color: var(--muted); }
@@ -602,11 +609,11 @@ body { padding-bottom: 5rem; }
     <!-- Admin view -->
     <div id="admin-view" style="display:none;">
       <div class="tabs" id="admin-tabs">
-        <button class="tab active" onclick="showAdminTab('overview')">Schedule</button>
-        <button class="tab" onclick="showAdminTab('units')">Units</button>
+        <button class="tab active" onclick="showAdminTab('activity')">Activity</button>
+        <button class="tab" onclick="showAdminTab('overview')">Schedule</button>
         <button class="tab" onclick="showAdminTab('history')">History</button>
         <button class="tab" onclick="showAdminTab('cleaners')">Cleaners</button>
-        <button class="tab" onclick="showAdminTab('activity')">Activity</button>
+        <button class="tab" onclick="showAdminTab('units')">Units</button>
       </div>
 
       <!-- Schedule tab -->
@@ -904,6 +911,10 @@ function showApp() {
   if (currentUser.role === 'admin') {
     document.getElementById('cleaner-view').style.display = 'none';
     document.getElementById('admin-view').style.display = 'block';
+    // Default to Activity tab on login
+    document.getElementById('admin-overview').style.display = 'none';
+    document.getElementById('admin-activity').style.display = 'block';
+    loadAdminActivity();
     loadAdminSchedule();
     loadCleanersList();
   } else {
