@@ -606,6 +606,7 @@ body { padding-bottom: 5rem; }
         <button class="tab" onclick="showAdminTab('units')">Units</button>
         <button class="tab" onclick="showAdminTab('history')">History</button>
         <button class="tab" onclick="showAdminTab('cleaners')">Cleaners</button>
+        <button class="tab" onclick="showAdminTab('activity')">Activity</button>
       </div>
 
       <!-- Schedule tab -->
@@ -627,6 +628,12 @@ body { padding-bottom: 5rem; }
           <div style="display:flex;flex-direction:column;gap:0.6rem;" id="unit-cards"></div>
         </div>
         <div id="unit-detail-view" style="display:none;"></div>
+      </div>
+
+      <!-- Activity tab -->
+      <div id="admin-activity" style="display:none;">
+        <div id="admin-activity-loading" class="loading"><span class="spinner"></span>Loading activity...</div>
+        <div id="admin-activity-content"></div>
       </div>
 
       <!-- Cleaners tab -->
@@ -784,12 +791,12 @@ function applyLang() {
 
 async function initFirebase(config) {
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
-  const { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where }
+  const { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where, orderBy, limit, addDoc }
     = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
 
   const app = initializeApp(config);
   db = getFirestore(app);
-  window._fb = { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where };
+  window._fb = { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where, orderBy, limit, addDoc };
   return true;
 }
 
@@ -1552,6 +1559,8 @@ window.claimSlot = async function(key, date, unit) {
       body: `${currentUser.name} claimed Unit ${unit} on ${dateLabel}`
     });
   } catch(e) { /* silent — don't block the claim if notification fails */ }
+  // Log activity
+  logActivity('claim', `Claimed Unit ${unit}`, { unit, date });
   // Queue this slot and show/refresh the calendar prompt
   pendingCalendarSlots.push({ date, unit });
   showCalendarPrompt();
@@ -1575,6 +1584,7 @@ window.unclaim = async function(key) {
         body: `${currentUser.name} released Unit ${unit} on ${dateLabel} — slot is now open`
       });
     } catch(e) { /* silent */ }
+    logActivity('unclaim', `Released Unit ${unit}`, { unit, date });
   }
 };
 
@@ -1795,12 +1805,14 @@ window.setCheckinTime = async function(key, date, unit, time) {
 window.showAdminTab = function(tab) {
   document.querySelectorAll('#admin-tabs .tab').forEach(t => t.classList.remove('active'));
   event.target.classList.add('active');
-  document.getElementById('admin-overview').style.display = tab==='overview' ? 'block' : 'none';
-  document.getElementById('admin-units').style.display    = tab==='units'    ? 'block' : 'none';
-  document.getElementById('admin-history').style.display  = tab==='history'  ? 'block' : 'none';
-  document.getElementById('admin-cleaners').style.display = tab==='cleaners' ? 'block' : 'none';
+  document.getElementById('admin-overview').style.display  = tab==='overview'  ? 'block' : 'none';
+  document.getElementById('admin-units').style.display     = tab==='units'     ? 'block' : 'none';
+  document.getElementById('admin-history').style.display   = tab==='history'   ? 'block' : 'none';
+  document.getElementById('admin-cleaners').style.display  = tab==='cleaners'  ? 'block' : 'none';
+  document.getElementById('admin-activity').style.display  = tab==='activity'  ? 'block' : 'none';
   if (tab === 'units') renderUnitCards();
   if (tab === 'history') loadAdminHistory();
+  if (tab === 'activity') loadAdminActivity();
 };
 
 // ── Admin — Units management ───────────────────────────────
@@ -2604,6 +2616,8 @@ window.notifyOwner = async function() {
     });
   } catch(e) { console.error('History write failed:', e); }
 
+  // Log activity
+  logActivity('complete', `Completed clean — Unit ${clState.unit} ready`, { unit: clState.unit, date: clState.date });
   // Send a simple "unit is ready" SMS — no payment in this message
   const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
@@ -2645,6 +2659,7 @@ window.sendPaymentFromComplete = async function() {
       paymentAmount: amount
     });
   } catch(e) { console.error('Payment write failed:', e); }
+  logActivity('payment_request', `Requested payment $${amount.toFixed(2)} — Unit ${clState.unit}`, { unit: clState.unit, date: clState.date, amount });
 
   // Send SMS to Satoru with Cash App link (same as full payment flow)
   window.location.href = `sms:${OWNER_PHONE}&body=${encodeURIComponent(msgBody)}`;
@@ -2837,9 +2852,66 @@ window.adminMarkPaid = async function(key) {
   try {
     const { doc, updateDoc } = window._fb;
     await updateDoc(doc(db, 'history', key), { paid: true, paidAt: new Date().toISOString() });
-    // onSnapshot will auto-refresh the admin history view
+    // Log the payment marked as paid
+    const parts = key.split('_'); // key = date_unit
+    const unit = parts.length >= 2 ? parts[parts.length - 1] : key;
+    logActivity('paid', `Marked paid`, { unit, historyKey: key });
   } catch(e) { alert('Could not mark paid: ' + e.message); }
 };
+
+// ── Activity log ───────────────────────────────────────────
+async function logActivity(type, message, meta = {}) {
+  try {
+    const { collection, addDoc } = window._fb;
+    await addDoc(collection(db, 'activity'), {
+      type,       // 'claim' | 'unclaim' | 'complete' | 'payment_request' | 'paid'
+      message,
+      ...meta,
+      actor: (currentUser && currentUser.name) || 'unknown',
+      ts: new Date().toISOString()
+    });
+  } catch(e) { /* silent — activity log is non-critical */ }
+}
+
+let _adminActivityUnsub = null;
+function loadAdminActivity() {
+  const loadingEl = document.getElementById('admin-activity-loading');
+  const content   = document.getElementById('admin-activity-content');
+  if (!loadingEl || !content) return;
+  loadingEl.style.display = 'block';
+  content.innerHTML = '';
+  if (_adminActivityUnsub) { _adminActivityUnsub(); _adminActivityUnsub = null; }
+  const { collection, onSnapshot, query, orderBy, limit } = window._fb;
+  const q = query(collection(db, 'activity'), orderBy('ts', 'desc'), limit(100));
+  _adminActivityUnsub = onSnapshot(q, snap => {
+    loadingEl.style.display = 'none';
+    content.innerHTML = '';
+    if (snap.empty) {
+      content.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0;">No activity yet.</div>';
+      return;
+    }
+    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', default:'🔔' };
+    snap.forEach(d => {
+      const r = d.data();
+      const icon = ICONS[r.type] || ICONS.default;
+      const ts = r.ts ? new Date(r.ts) : null;
+      const timeStr = ts ? ts.toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true }) : '';
+      const unitTag = r.unit ? `<span style="font-size:0.68rem;background:var(--mine);color:var(--mine-border);border-radius:3px;padding:0.1rem 0.4rem;margin-left:0.3rem;">Unit ${r.unit}</span>` : '';
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:flex-start;gap:0.6rem;padding:0.6rem 0;border-bottom:1px solid var(--border);';
+      row.innerHTML = `
+        <span style="font-size:1.1rem;line-height:1.4;">${icon}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:0.82rem;line-height:1.4;">${r.message}${unitTag}</div>
+          <div style="font-size:0.7rem;color:var(--muted);margin-top:0.15rem;">${r.actor} · ${timeStr}</div>
+        </div>`;
+      content.appendChild(row);
+    });
+  }, err => {
+    loadingEl.style.display = 'none';
+    content.innerHTML = `<div style="color:var(--accent);font-size:0.8rem;">Error loading activity: ${err.message}</div>`;
+  });
+}
 
 // ── Cleaner past cleans ───────────────────────────────────
 let _myHistoryUnsub = null;
