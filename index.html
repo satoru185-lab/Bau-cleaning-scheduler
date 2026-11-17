@@ -723,6 +723,7 @@ function setLang(lang) {
     if (typeof loadMyHistory === 'function') loadMyHistory();
   }
 }
+window.setLang = setLang;
 function applyLang() {
   // Login card
   const nameEl = document.getElementById('login-name');
@@ -2551,6 +2552,7 @@ function loadAdminHistory() {
 
   const { collection, onSnapshot } = window._fb;
   _adminHistoryUnsub = onSnapshot(collection(db, 'history'), snap => {
+  content.innerHTML = ''; // clear on every snapshot fire to prevent duplicates
   loadingEl.style.display = 'none';
 
   if (snap.empty) {
@@ -2759,10 +2761,10 @@ window.markCleanDone = async function(claimKey, unit, date, nights) {
 document.addEventListener('DOMContentLoaded', function() {
   const enBtn = document.getElementById('lang-en');
   const esBtn = document.getElementById('lang-es');
-  if (enBtn) enBtn.addEventListener('touchend', function(e) { e.preventDefault(); window.setLang('en'); }, { passive: false });
-  if (esBtn) esBtn.addEventListener('touchend', function(e) { e.preventDefault(); window.setLang('es'); }, { passive: false });
-  if (enBtn) enBtn.addEventListener('click', function() { window.setLang('en'); });
-  if (esBtn) esBtn.addEventListener('click', function() { window.setLang('es'); });
+  if (enBtn) enBtn.addEventListener('touchend', function(e) { e.preventDefault(); setLang('en'); }, { passive: false });
+  if (esBtn) esBtn.addEventListener('touchend', function(e) { e.preventDefault(); setLang('es'); }, { passive: false });
+  if (enBtn) enBtn.addEventListener('click', function() { setLang('en'); });
+  if (esBtn) esBtn.addEventListener('click', function() { setLang('es'); });
 });
 
 // ── Init ─────────────────────────────────────────────────
