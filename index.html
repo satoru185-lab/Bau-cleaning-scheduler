@@ -773,12 +773,12 @@ function applyLang() {
 
 async function initFirebase(config) {
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js');
-  const { getFirestore, doc, getDoc, getDocs, setDoc, deleteDoc, collection, onSnapshot, query, where }
+  const { getFirestore, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where }
     = await import('https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js');
 
   const app = initializeApp(config);
   db = getFirestore(app);
-  window._fb = { doc, getDoc, getDocs, setDoc, deleteDoc, collection, onSnapshot, query, where };
+  window._fb = { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where };
   return true;
 }
 
@@ -1998,6 +1998,12 @@ async function loadCleanersList() {
             onchange="setCleanerPhone('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);flex:1;min-width:0;" />
         </div>
+        <div style="margin-top:0.25rem;display:flex;align-items:center;gap:0.4rem;">
+          <span style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">$Cashtag:</span>
+          <input type="text" placeholder="CashAppUsername" value="${data.cashtag||''}"
+            onchange="setCleanerCashtag('${d.id}', this.value)"
+            style="font-family:'DM Mono',monospace;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);flex:1;min-width:0;" />
+        </div>
         <div style="margin-top:0.25rem;font-size:0.68rem;color:var(--muted);">PIN: ${data.pin||'—'}</div>`;
       list.appendChild(row);
     });
@@ -2040,6 +2046,15 @@ window.setCleanerAccess = async function(id, level) {
   const snap = await getDoc(doc(db, 'cleaners', id));
   if (snap.exists()) {
     await setDoc(doc(db, 'cleaners', id), { ...snap.data(), accessLevel: level });
+  }
+};
+
+window.setCleanerCashtag = async function(id, tag) {
+  const { doc, setDoc, getDoc } = window._fb;
+  const snap = await getDoc(doc(db, 'cleaners', id));
+  if (snap.exists()) {
+    // Strip leading $ if they typed it
+    await setDoc(doc(db, 'cleaners', id), { ...snap.data(), cashtag: tag.replace(/^\$/, '').trim() });
   }
 };
 
@@ -2268,6 +2283,8 @@ function buildRoomTabs(unit) {
 }
 
 function renderRoom(unit, idx) {
+  // Reset carousel to first photo when switching rooms
+  if (window._carouselIdx) window._carouselIdx[idx] = 0;
   // Update tab active state
   document.querySelectorAll('.room-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
 
@@ -2275,12 +2292,38 @@ function renderRoom(unit, idx) {
   const room = rooms[idx];
   const body = document.getElementById('cl-body');
 
-  // Photo area
-  const photoHtml = room.photo
-    ? `<div class="room-photo"><img src="${room.photo}" alt="${room.name}"></div>`
-    : `<div class="room-photo" style="display:flex;align-items:center;justify-content:center;min-height:180px;">
+  // Photo area — multi-photo carousel
+  const photos = Array.isArray(room.photos) && room.photos.length ? room.photos
+                 : (room.photo ? [room.photo] : []);
+  let photoHtml;
+  if (photos.length === 0) {
+    photoHtml = `<div class="room-photo" style="display:flex;align-items:center;justify-content:center;min-height:180px;">
          <span style="color:var(--muted);font-size:0.78rem;">📷 Photo coming soon</span>
        </div>`;
+  } else if (photos.length === 1) {
+    photoHtml = `<div class="room-photo"><img src="${photos[0]}" alt="${room.name}"></div>`;
+  } else {
+    const dots = photos.map((_,pi) => `<span onclick="roomCarouselGo(${idx},${pi})" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pi===0?'var(--ink)':'var(--border)'};cursor:pointer;transition:background .2s;margin:0 2px;" data-ci="${pi}"></span>`).join('');
+    const imgs = photos.map((p,pi) => `<img src="${p}" alt="${room.name} ${pi+1}" style="flex:0 0 100%;width:100%;height:100%;object-fit:cover;border-radius:3px;display:block;" />`).join('');
+    photoHtml = `
+      <div style="position:relative;margin-bottom:1rem;" id="carousel-wrap-${idx}">
+        <div style="width:100%;aspect-ratio:4/3;overflow:hidden;border-radius:4px;border:1px solid var(--border);background:var(--border);position:relative;">
+          <div id="carousel-track-${idx}" style="display:flex;width:100%;height:100%;transition:transform .25s ease;will-change:transform;">${imgs}</div>
+          <!-- Prev/next tap zones -->
+          <div onclick="roomCarouselStep(${idx},-1)" style="position:absolute;left:0;top:0;width:38%;height:100%;cursor:pointer;"></div>
+          <div onclick="roomCarouselStep(${idx}, 1)" style="position:absolute;right:0;top:0;width:38%;height:100%;cursor:pointer;"></div>
+          <!-- Arrow hints -->
+          <div id="carousel-arrow-l-${idx}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:1.1rem;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.6);pointer-events:none;opacity:0.8;">‹</div>
+          <div id="carousel-arrow-r-${idx}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:1.1rem;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.6);pointer-events:none;opacity:0.8;">›</div>
+        </div>
+        <div style="display:flex;justify-content:center;align-items:center;margin-top:0.4rem;gap:0.1rem;" id="carousel-dots-${idx}">${dots}</div>
+      </div>`;
+  }
+  // Store carousel state for this room
+  window._carouselIdx = window._carouselIdx || {};
+  window._carouselIdx[idx] = window._carouselIdx[idx] || 0;
+  window._carouselLen = window._carouselLen || {};
+  window._carouselLen[idx] = photos.length;
 
   // Checklist items
   const itemsHtml = room.items.map((item, j) => {
@@ -2293,6 +2336,48 @@ function renderRoom(unit, idx) {
 
   body.innerHTML = `${photoHtml}<div class="checklist-items">${itemsHtml}</div>`;
   updateProgress(unit);
+  // Init carousel state for this room
+  if (photos.length > 1) {
+    const ci = (window._carouselIdx && window._carouselIdx[idx]) || 0;
+    window.roomCarouselGo(idx, ci);
+    attachCarouselSwipe(idx);
+  }
+}
+
+// ── Room photo carousel ───────────────────────────────────
+window.roomCarouselGo = function(roomIdx, photoIdx) {
+  const len = window._carouselLen && window._carouselLen[roomIdx];
+  if (!len) return;
+  const ci = Math.max(0, Math.min(len - 1, photoIdx));
+  window._carouselIdx[roomIdx] = ci;
+  const track = document.getElementById(`carousel-track-${roomIdx}`);
+  if (track) track.style.transform = `translateX(-${ci * 100}%)`;
+  // Update dots
+  const dotsWrap = document.getElementById(`carousel-dots-${roomIdx}`);
+  if (dotsWrap) dotsWrap.querySelectorAll('span[data-ci]').forEach(s => {
+    s.style.background = parseInt(s.dataset.ci) === ci ? 'var(--ink)' : 'var(--border)';
+  });
+  // Show/hide arrows
+  const al = document.getElementById(`carousel-arrow-l-${roomIdx}`);
+  const ar = document.getElementById(`carousel-arrow-r-${roomIdx}`);
+  if (al) al.style.opacity = ci > 0 ? '0.8' : '0';
+  if (ar) ar.style.opacity = ci < len - 1 ? '0.8' : '0';
+};
+window.roomCarouselStep = function(roomIdx, dir) {
+  const ci = (window._carouselIdx && window._carouselIdx[roomIdx]) || 0;
+  window.roomCarouselGo(roomIdx, ci + dir);
+};
+// Touch-swipe support — attach after render
+function attachCarouselSwipe(roomIdx) {
+  const wrap = document.getElementById(`carousel-wrap-${roomIdx}`);
+  if (!wrap || wrap._swipeAttached) return;
+  wrap._swipeAttached = true;
+  let startX = 0;
+  wrap.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive: true });
+  wrap.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 40) window.roomCarouselStep(roomIdx, dx < 0 ? 1 : -1);
+  }, { passive: true });
 }
 
 window.toggleCheck = function(roomIdx, itemIdx) {
@@ -2426,7 +2511,11 @@ window.sendPaymentRequest = async function() {
     return;
   }
   const cleanerName = currentUser.name;
-  const cashtag = currentUser.cashtag || OWNER_CASHTAG;
+  const cashtag = (currentUser.cashtag || '').trim();
+  if (!cashtag) {
+    alert('No Cash App username on file. Ask Satoru to add your $Cashtag in the admin panel first.');
+    return;
+  }
   const cashAppUrl = `https://cash.app/$${cashtag}/${amount.toFixed(2)}`;
   const lineItems = selected.map(s => `  • ${s}`).join('\n');
   const msgBody = `💰 Payment request from ${cleanerName}\n\n${lineItems}\n\nTotal: $${amount.toFixed(2)}\n\nSend via Cash App:\n${cashAppUrl}`;
@@ -2539,93 +2628,96 @@ window.adminMarkPaid = async function(key) {
 };
 
 // ── Cleaner past cleans ───────────────────────────────────
-async function loadMyHistory() {
-  const { collection, getDocs } = window._fb;
-  const [histSnap, claimsSnap] = await Promise.all([
-    getDocs(collection(db, 'history')),
-    getDocs(collection(db, 'claims'))
-  ]);
+let _myHistoryUnsub = null;
 
-  // Completed cleans
-  const completed = {};
-  histSnap.forEach(d => {
-    if (d.data().cleaner === currentUser.name) completed[d.id] = d.data();
-  });
+function loadMyHistory() {
+  const { collection, getDocs, onSnapshot } = window._fb;
 
-  // All my claims (including in-progress / not yet notified)
-  const myClaims = {};
-  claimsSnap.forEach(d => {
-    if (d.data().cleaner === currentUser.name) myClaims[d.id] = d.data();
-  });
+  // Unsubscribe previous listener to avoid stacking
+  if (_myHistoryUnsub) { _myHistoryUnsub(); _myHistoryUnsub = null; }
 
-  // Build combined list: completed entries + in-progress claims (past or today, not in history)
-  const today = new Date(); today.setHours(0,0,0,0);
-  const rows = [];
+  // One-time fetch of my claims (rarely changes mid-session)
+  getDocs(collection(db, 'claims')).then(claimsSnap => {
+    const myClaims = {};
+    claimsSnap.forEach(d => {
+      if (d.data().cleaner === currentUser.name) myClaims[d.id] = d.data();
+    });
 
-  // Add all completed history entries
-  _completedCleans = []; // reset for payment flow
-  for (const [key, r] of Object.entries(completed)) {
-    rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done', key,
-      paymentRequested: !!r.paymentRequested, paid: !!r.paid });
-    _completedCleans.push({ date: r.date, unit: r.unit, nights: r.nights || 0, key,
-      paymentRequested: !!r.paymentRequested, paid: !!r.paid });
-  }
-  _completedCleans.sort((a,b) => b.date.localeCompare(a.date));
+    // Live listener on history — fires immediately and on every change (payment status, paid, etc.)
+    _myHistoryUnsub = onSnapshot(collection(db, 'history'), histSnap => {
+      const completed = {};
+      histSnap.forEach(d => {
+        if (d.data().cleaner === currentUser.name) completed[d.id] = d.data();
+      });
 
-  // Add claimed-but-not-completed slots that are today or in the past
-  for (const [key, c] of Object.entries(myClaims)) {
-    if (completed[key]) continue; // already in history
-    const claimDate = new Date(c.date + 'T12:00:00');
-    if (claimDate <= today) {
-      const isPast = claimDate < today; // strictly before today
-      rows.push({ date: c.date, unit: c.unit, nights: 0, status: 'in-progress', key, isPast });
-    }
-  }
+      const today = new Date(); today.setHours(0,0,0,0);
+      const rows = [];
 
-  rows.sort((a,b) => b.date.localeCompare(a.date));
-
-  const wrap = document.getElementById('my-history-list');
-  if (!wrap) return;
-  if (rows.length === 0) {
-    wrap.innerHTML = `<span style="color:var(--muted);font-size:0.82rem;">${t('noHistory')}</span>`;
-    return;
-  }
-  wrap.innerHTML = '';
-  for (const r of rows.slice(0, 20)) {
-    const d = new Date(r.date + 'T12:00:00');
-    const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-    const _histAcc = (currentUser && currentUser.accessLevel) || 'basic';
-    const nightLabel = (r.nights && _histAcc === 'full') ? ` · ${r.nights} night${r.nights===1?'':'s'}` : '';
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
-    if (r.status === 'in-progress') {
-      const markDoneBtn = r.isPast
-        ? `<button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--green);border-radius:3px;background:#f0faf4;color:#2a6b4a;cursor:pointer;touch-action:manipulation;"
-            onclick="markCleanDone('${r.key}','${r.unit}','${r.date}','${r.nights}')">✓ Mark done</button>`
-        : '';
-      row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
-        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
-          <span style="color:var(--accent);font-size:0.72rem;">${t('inProgress')}</span>
-          <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;"
-            onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">${t('resume')}</button>
-          ${markDoneBtn}
-        </div>`;
-    } else {
-      // Payment status badge
-      let payBadge = '';
-      if (r.paid) {
-        payBadge = `<span style="font-size:0.68rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.15rem 0.4rem;">✅ Paid</span>`;
-      } else if (r.paymentRequested) {
-        payBadge = `<span style="font-size:0.68rem;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;padding:0.15rem 0.4rem;">💵 Requested</span>`;
+      // Completed history entries
+      _completedCleans = [];
+      for (const [key, r] of Object.entries(completed)) {
+        rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done', key,
+          paymentRequested: !!r.paymentRequested, paid: !!r.paid });
+        _completedCleans.push({ date: r.date, unit: r.unit, nights: r.nights || 0, key,
+          paymentRequested: !!r.paymentRequested, paid: !!r.paid });
       }
-      row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
-        <div style="display:flex;align-items:center;gap:0.4rem;">
-          ${payBadge}
-          <span style="color:var(--green);font-size:1rem;">✅</span>
-        </div>`;
-    }
-    wrap.appendChild(row);
-  }
+      _completedCleans.sort((a,b) => b.date.localeCompare(a.date));
+
+      // In-progress claims (past or today, not yet in history)
+      for (const [key, c] of Object.entries(myClaims)) {
+        if (completed[key]) continue;
+        const claimDate = new Date(c.date + 'T12:00:00');
+        if (claimDate <= today) {
+          rows.push({ date: c.date, unit: c.unit, nights: 0, status: 'in-progress', key,
+            isPast: claimDate < today });
+        }
+      }
+
+      rows.sort((a,b) => b.date.localeCompare(a.date));
+
+      const wrap = document.getElementById('my-history-list');
+      if (!wrap) return;
+      if (rows.length === 0) {
+        wrap.innerHTML = `<span style="color:var(--muted);font-size:0.82rem;">${t('noHistory')}</span>`;
+        return;
+      }
+      wrap.innerHTML = '';
+      const _histAcc = (currentUser && currentUser.accessLevel) || 'basic';
+      for (const r of rows.slice(0, 20)) {
+        const d = new Date(r.date + 'T12:00:00');
+        const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+        const nightLabel = (r.nights && _histAcc === 'full') ? ` · ${r.nights} night${r.nights===1?'':'s'}` : '';
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
+
+        if (r.status === 'in-progress') {
+          const markDoneBtn = r.isPast
+            ? `<button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--green);border-radius:3px;background:#f0faf4;color:#2a6b4a;cursor:pointer;touch-action:manipulation;"
+                onclick="markCleanDone('${r.key}','${r.unit}','${r.date}','${r.nights}')">✓ Mark done</button>`
+            : '';
+          row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
+            <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
+              <span style="color:var(--accent);font-size:0.72rem;">${t('inProgress')}</span>
+              <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;"
+                onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">${t('resume')}</button>
+              ${markDoneBtn}
+            </div>`;
+        } else {
+          let payBadge = '';
+          if (r.paid) {
+            payBadge = `<span style="font-size:0.7rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.2rem 0.5rem;white-space:nowrap;">✅ Paid</span>`;
+          } else if (r.paymentRequested) {
+            payBadge = `<span style="font-size:0.7rem;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;padding:0.2rem 0.5rem;white-space:nowrap;">💵 Requested</span>`;
+          }
+          row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
+            <div style="display:flex;align-items:center;gap:0.4rem;">
+              ${payBadge}<span style="color:var(--green);font-size:1rem;">✅</span>
+            </div>`;
+        }
+        wrap.appendChild(row);
+      }
+    });
+  });
 }
 
 // ── Mark a past clean as done without going through checklist ──
