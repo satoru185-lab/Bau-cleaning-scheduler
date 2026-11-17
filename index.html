@@ -1849,7 +1849,10 @@ function renderUnitDetail(unit) {
       : `<div style="height:70px;background:var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;">No photos yet</div>`;
 
     const itemsHtml = room.items.map((item, ii) =>
-      `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);">
+      `<div class="item-row" draggable="true" data-unit="${unit}" data-room="${ri}" data-idx="${ii}"
+        style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:default;"
+        ondragstart="itemDragStart(event)" ondragover="itemDragOver(event)" ondrop="itemDrop(event)" ondragend="itemDragEnd(event)">
+        <span style="font-size:1rem;color:var(--muted);cursor:grab;padding:0 0.2rem;touch-action:none;" title="Drag to reorder">≡</span>
         <input type="text" value="${item.replace(/"/g,'&quot;')}"
           style="flex:1;font-family:\'DM Mono\',monospace;font-size:0.8rem;border:1px solid var(--border);border-radius:3px;padding:0.3rem 0.5rem;background:var(--bg);"
           onchange="updateChecklistItem('${unit}',${ri},${ii},this.value)" />
@@ -1916,6 +1919,44 @@ window.removeChecklistItem = function(unit, roomIdx, itemIdx) {
 
 window.addChecklistItem = function(unit, roomIdx) {
   UNIT_CHECKLISTS[unit].rooms[roomIdx].items.push('New item');
+  saveChecklistToFirestore(unit);
+  renderUnitDetail(unit);
+};
+
+// ── Drag-to-reorder checklist items ──────────────────────────
+let _dragSrc = null;
+window.itemDragStart = function(e) {
+  _dragSrc = e.currentTarget;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '');
+  setTimeout(() => { if (_dragSrc) _dragSrc.style.opacity = '0.4'; }, 0);
+};
+window.itemDragOver = function(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const row = e.currentTarget;
+  if (row !== _dragSrc) {
+    row.style.borderTop = '2px solid var(--accent)';
+  }
+};
+window.itemDragEnd = function(e) {
+  document.querySelectorAll('.item-row').forEach(r => {
+    r.style.opacity = '';
+    r.style.borderTop = '';
+  });
+  _dragSrc = null;
+};
+window.itemDrop = function(e) {
+  e.preventDefault();
+  const target = e.currentTarget;
+  if (!_dragSrc || _dragSrc === target) return;
+  const unit = _dragSrc.dataset.unit;
+  const roomIdx = parseInt(_dragSrc.dataset.room);
+  const fromIdx = parseInt(_dragSrc.dataset.idx);
+  const toIdx = parseInt(target.dataset.idx);
+  const items = UNIT_CHECKLISTS[unit].rooms[roomIdx].items;
+  const [moved] = items.splice(fromIdx, 1);
+  items.splice(toIdx, 0, moved);
   saveChecklistToFirestore(unit);
   renderUnitDetail(unit);
 };
