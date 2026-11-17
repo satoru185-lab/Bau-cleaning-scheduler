@@ -501,11 +501,6 @@ body { padding-bottom: 5rem; }
     <div class="complete-icon">✅</div>
     <div class="complete-title" id="complete-title">All done!</div>
     <div class="complete-sub" id="complete-sub">Unit C is clean and ready for check-in.</div>
-    <div id="cashapp-amount-row" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;justify-content:center;">
-      <span id="payment-label" style="font-size:0.78rem;color:#555;">Payment amount: $</span>
-      <input type="number" id="cashapp-amount" inputmode="decimal" min="0" step="0.01"
-        style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
-    </div>
     <button class="btn btn-green" style="width:100%;font-size:0.9rem;padding:0.75rem;touch-action:manipulation;" onclick="notifyOwner()" id="notify-btn">
       ✅ Notify Satoru — Unit Ready
     </button>
@@ -560,7 +555,22 @@ body { padding-bottom: 5rem; }
           <div id="my-claims-list" style="font-size:0.82rem;color:var(--muted);">Loading...</div>
         </div>
         <div class="card" style="margin-top:0.5rem;">
-          <div class="card-title">Past cleans</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+            <div class="card-title" style="margin-bottom:0;" id="past-cleans-title">Past cleans</div>
+            <button id="request-pay-btn" onclick="togglePaymentMode()" style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.3rem 0.7rem;border:1px solid var(--green);border-radius:4px;background:#f0faf4;color:#2a6b4a;cursor:pointer;touch-action:manipulation;">💵 Request Payment</button>
+          </div>
+          <!-- Payment selection mode -->
+          <div id="payment-select-panel" style="display:none;border:1px solid var(--green);border-radius:6px;padding:0.75rem;margin-bottom:0.75rem;background:#f8fdf9;">
+            <div style="font-size:0.75rem;color:#2a6b4a;margin-bottom:0.6rem;font-weight:600;">Select cleans to bill:</div>
+            <div id="payment-checklist" style="font-size:0.82rem;"></div>
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">
+              <span style="font-size:0.78rem;color:#555;">Total: $</span>
+              <input type="number" id="payment-total" inputmode="decimal" min="0" step="0.01" placeholder="0.00"
+                style="font-family:'DM Mono',monospace;font-size:0.85rem;border:1px solid #ccc;border-radius:4px;padding:0.3rem 0.5rem;width:80px;text-align:center;" />
+              <button onclick="sendPaymentRequest()" style="font-family:'DM Mono',monospace;font-size:0.75rem;padding:0.4rem 0.9rem;border:none;border-radius:4px;background:#2a6b4a;color:white;cursor:pointer;touch-action:manipulation;flex:1;">Send Request →</button>
+            </div>
+            <button onclick="togglePaymentMode()" style="margin-top:0.4rem;font-family:'DM Mono',monospace;font-size:0.7rem;background:none;border:none;color:var(--muted);cursor:pointer;touch-action:manipulation;width:100%;text-align:center;">Cancel</button>
+          </div>
           <div id="my-history-list" style="font-size:0.82rem;color:var(--muted);">Loading...</div>
         </div>
       </div>
@@ -667,6 +677,9 @@ const TRANSLATIONS = {
     guestCleanliness: 'Guest cleanliness?', rateBeforeStart: 'Rate guest cleanliness before you start', skip: 'Skip',
     loadingSchedule: 'Loading schedule…', loadingHistory: 'Loading…',
     admin: 'Admin', cleaner: 'Cleaner',
+    requestPayment: '💵 Request Payment', markDone: '✓ Mark done',
+    selectCleans: 'Select cleans to bill:', totalLabel: 'Total: $',
+    sendRequest: 'Send Request →', cancelPay: 'Cancel',
   },
   es: {
     signIn: 'Iniciar sesión', signOut: 'Cerrar sesión', yourName: 'Tu nombre', pin: 'PIN',
@@ -688,6 +701,9 @@ const TRANSLATIONS = {
     guestCleanliness: '¿Limpieza del huésped?', rateBeforeStart: 'Califica la limpieza antes de empezar', skip: 'Omitir',
     loadingSchedule: 'Cargando horario…', loadingHistory: 'Cargando…',
     admin: 'Admin', cleaner: 'Limpiador/a',
+    requestPayment: '💵 Solicitar Pago', markDone: '✓ Marcar listo',
+    selectCleans: 'Selecciona limpiezas a cobrar:', totalLabel: 'Total: $',
+    sendRequest: 'Enviar solicitud →', cancelPay: 'Cancelar',
   }
 };
 function t(key, ...args) {
@@ -2136,6 +2152,9 @@ const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
 // Checklist state
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {}, guestRating: 0 };
 
+// Completed cleans available for payment requests (populated by loadMyHistory)
+let _completedCleans = [];
+
 window.openChecklist = function(unit, date, nights) {
   clState = { unit, date, nights: parseInt(nights)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString() };
   document.getElementById('cl-title').textContent = `Unit ${unit}`;
@@ -2298,24 +2317,80 @@ window.notifyOwner = async function() {
     });
   } catch(e) { console.error('History write failed:', e); }
 
-  const amount = parseFloat(document.getElementById('cashapp-amount').value) || 0;
-  const payLine = amount > 0 ? `\nPlease send me $${amount.toFixed(2)} on Cash App. Thanks!` : '';
-  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})${payLine}`);
+  // Send a simple "unit is ready" SMS — no payment in this message
+  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
 
   // After SMS opens, return to home tab and refresh history
   setTimeout(() => {
-    // Hide checklist, show main cleaner screen
     document.getElementById('checklist-screen').style.display = 'none';
-    // Restore bottom nav
     const bottomNav = document.querySelector('.bottom-nav');
     if (bottomNav) bottomNav.style.display = '';
     document.getElementById('cleaner-screen').style.display = 'block';
-    // Refresh Past Cleans list (onSnapshot will also catch this, belt+suspenders)
     loadMyHistory();
-    // Switch to home tab so cleaner sees updated state
     if (typeof switchTab === 'function') switchTab('home');
   }, 500);
+};
+
+// ── Payment request flow ──────────────────────────────────
+let _paymentModeActive = false;
+
+window.togglePaymentMode = function() {
+  _paymentModeActive = !_paymentModeActive;
+  const panel = document.getElementById('payment-select-panel');
+  const btn = document.getElementById('request-pay-btn');
+  panel.style.display = _paymentModeActive ? 'block' : 'none';
+  if (_paymentModeActive) {
+    btn.style.display = 'none';
+    buildPaymentChecklist();
+  } else {
+    btn.style.display = '';
+    document.getElementById('payment-total').value = '';
+  }
+};
+
+function buildPaymentChecklist() {
+  const wrap = document.getElementById('payment-checklist');
+  wrap.innerHTML = '';
+  if (_completedCleans.length === 0) {
+    wrap.innerHTML = '<span style="color:var(--muted);">No completed cleans yet.</span>';
+    return;
+  }
+  _completedCleans.slice(0, 15).forEach((r, i) => {
+    const d = new Date(r.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    const nightLabel = r.nights ? ` · ${r.nights}n` : '';
+    const label = `${dateStr} — Unit ${r.unit}${nightLabel}`;
+    const id = `pay-cb-${i}`;
+    const item = document.createElement('label');
+    item.style.cssText = 'display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0;cursor:pointer;border-bottom:1px solid var(--border);';
+    item.innerHTML = `<input type="checkbox" id="${id}" data-label="${label}" style="width:18px;height:18px;cursor:pointer;touch-action:manipulation;flex-shrink:0;" checked /><span style="font-size:0.8rem;">${label}</span>`;
+    wrap.appendChild(item);
+  });
+}
+
+window.sendPaymentRequest = function() {
+  const amount = parseFloat(document.getElementById('payment-total').value) || 0;
+  if (amount <= 0) {
+    alert('Enter a payment amount first.');
+    return;
+  }
+  // Collect selected cleans
+  const selected = [];
+  document.querySelectorAll('#payment-checklist input[type=checkbox]:checked').forEach(cb => {
+    selected.push(cb.dataset.label);
+  });
+  if (selected.length === 0) {
+    alert('Select at least one clean to bill.');
+    return;
+  }
+  const cleanerName = currentUser.name;
+  const cashtag = currentUser.cashtag || OWNER_CASHTAG;
+  const cashAppUrl = `https://cash.app/$${cashtag}/${amount.toFixed(2)}`;
+  const lineItems = selected.map(s => `  • ${s}`).join('\n');
+  const msgBody = `💰 Payment request from ${cleanerName}\n\n${lineItems}\n\nTotal: $${amount.toFixed(2)}\n\nSend via Cash App:\n${cashAppUrl}`;
+  window.location.href = `sms:${OWNER_PHONE}&body=${encodeURIComponent(msgBody)}`;
+  setTimeout(() => togglePaymentMode(), 500);
 };
 
 // ── Admin History ─────────────────────────────────────────
@@ -2409,16 +2484,20 @@ async function loadMyHistory() {
   const rows = [];
 
   // Add all completed history entries
+  _completedCleans = []; // reset for payment flow
   for (const [key, r] of Object.entries(completed)) {
     rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done' });
+    _completedCleans.push({ date: r.date, unit: r.unit, nights: r.nights || 0 });
   }
+  _completedCleans.sort((a,b) => b.date.localeCompare(a.date));
 
   // Add claimed-but-not-completed slots that are today or in the past
   for (const [key, c] of Object.entries(myClaims)) {
     if (completed[key]) continue; // already in history
     const claimDate = new Date(c.date + 'T12:00:00');
     if (claimDate <= today) {
-      rows.push({ date: c.date, unit: c.unit, nights: 0, status: 'in-progress', key });
+      const isPast = claimDate < today; // strictly before today
+      rows.push({ date: c.date, unit: c.unit, nights: 0, status: 'in-progress', key, isPast });
     }
   }
 
@@ -2438,11 +2517,16 @@ async function loadMyHistory() {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
     if (r.status === 'in-progress') {
+      const markDoneBtn = r.isPast
+        ? `<button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--green);border-radius:3px;background:#f0faf4;color:#2a6b4a;cursor:pointer;touch-action:manipulation;"
+            onclick="markCleanDone('${r.key}','${r.unit}','${r.date}','${r.nights}')">✓ Mark done</button>`
+        : '';
       row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
-        <div style="display:flex;align-items:center;gap:0.5rem;">
+        <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
           <span style="color:var(--accent);font-size:0.72rem;">${t('inProgress')}</span>
           <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;"
             onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">${t('resume')}</button>
+          ${markDoneBtn}
         </div>`;
     } else {
       row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span><span style="color:var(--green);">✅</span>`;
@@ -2450,6 +2534,36 @@ async function loadMyHistory() {
     wrap.appendChild(row);
   }
 }
+
+// ── Mark a past clean as done without going through checklist ──
+window.markCleanDone = async function(claimKey, unit, date, nights) {
+  if (!confirm(`Mark Unit ${unit} on ${date} as completed?`)) return;
+  try {
+    const { doc, setDoc } = window._fb;
+    const historyKey = claimKey; // same as claim key: date_unit
+    await setDoc(doc(db, 'history', historyKey), {
+      date, unit,
+      cleaner: currentUser.name,
+      nights: parseInt(nights) || 0,
+      guestRating: null,
+      startedAt: null,
+      completedAt: new Date().toISOString(),
+      manualEntry: true
+    });
+    // Send ntfy notification to Satoru
+    try {
+      const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+      await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+        method: 'POST',
+        headers: { 'Title': `Unit ${unit} clean logged (${dateLabel})`, 'Tags': 'white_check_mark' },
+        body: `${currentUser.name} marked Unit ${unit} on ${dateLabel} as completed (manual entry).`
+      });
+    } catch(e) { /* ntfy optional */ }
+    loadMyHistory();
+  } catch(e) {
+    alert('Could not save: ' + e.message);
+  }
+};
 
 // ── Init ─────────────────────────────────────────────────
 bootApp();
