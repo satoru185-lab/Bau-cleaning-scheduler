@@ -798,11 +798,39 @@ async function bootApp() {
   try {
     await initFirebase(FIREBASE_CONFIG);
     await Promise.all([loadChecklistsFromFirestore(), loadCheckinTimes()]);
-    document.getElementById('login-card').style.display = 'block';
-    applyLang(); // Apply saved language preference to login screen
-    // Hide bottom nav on login screen so it doesn't cover the Sign In button
-    const bottomNav = document.querySelector('.bottom-nav');
-    if (bottomNav) bottomNav.style.display = 'none';
+
+    // Auto-login if a previous session was saved
+    let restored = false;
+    try {
+      const saved = localStorage.getItem('savedUser');
+      if (saved) {
+        const u = JSON.parse(saved);
+        if (u && u.name && u.role) {
+          currentUser = u;
+          // For cleaners, refresh their profile from Firestore in case cashtag/accessLevel changed
+          if (u.role === 'cleaner') {
+            try {
+              const { doc, getDoc } = window._fb;
+              const snap = await getDoc(doc(db, 'cleaners', u.name.toLowerCase()));
+              if (snap.exists()) {
+                const d = snap.data();
+                currentUser = { name: d.name, role: 'cleaner', scheduleDays: d.scheduleDays || 14, cashtag: d.cashtag || '', pay: d.pay || 0, accessLevel: d.accessLevel || 'basic', ntfyTopic: d.ntfyTopic || '' };
+                localStorage.setItem('savedUser', JSON.stringify(currentUser));
+              }
+            } catch(e) { /* use cached profile if Firestore unreachable */ }
+          }
+          showApp();
+          restored = true;
+        }
+      }
+    } catch(e) {}
+
+    if (!restored) {
+      document.getElementById('login-card').style.display = 'block';
+      applyLang();
+      const bottomNav = document.querySelector('.bottom-nav');
+      if (bottomNav) bottomNav.style.display = 'none';
+    }
   } catch(e) {
     console.error('Firebase error:', e);
     document.body.insertAdjacentHTML('afterbegin',
@@ -824,6 +852,7 @@ window.login = async function() {
   const snap = await getDoc(doc(db, 'cleaners', name.toLowerCase()));
   if (snap.exists() && snap.data().pin === pin) {
     currentUser = { name: snap.data().name, role: 'cleaner', scheduleDays: snap.data().scheduleDays || 14, cashtag: snap.data().cashtag || '', pay: snap.data().pay || 0, accessLevel: snap.data().accessLevel || 'basic', ntfyTopic: snap.data().ntfyTopic || '' };
+    try { localStorage.setItem('savedUser', JSON.stringify(currentUser)); } catch(e) {}
     showApp();
     return;
   }
@@ -831,6 +860,7 @@ window.login = async function() {
   // Admin check — only if no cleaner record matched
   if (ADMIN_PINS[pin]) {
     currentUser = { name: ADMIN_PINS[pin], role: 'admin' };
+    try { localStorage.setItem('savedUser', JSON.stringify(currentUser)); } catch(e) {}
     showApp();
     return;
   }
@@ -841,6 +871,7 @@ window.login = async function() {
 
 window.logout = function() {
   currentUser = null;
+  try { localStorage.removeItem('savedUser'); } catch(e) {}
   dismissCalendarPrompt();
   document.getElementById('user-bar').style.display = 'none';
   document.getElementById('app').style.display = 'none';
@@ -874,6 +905,54 @@ function showApp() {
     switchTab('home');
     loadCleanerSchedule();
     loadMyHistory();
+    // Restore in-progress checklist if cleaner closed app mid-clean
+    const saved = loadSavedClState();
+    if (saved && saved.unit && saved.date) {
+      // Brief delay so the schedule loads first
+      setTimeout(() => resumeChecklistFromSave(saved), 600);
+    }
+  }
+}
+
+function resumeChecklistFromSave(saved) {
+  clState = saved;
+  // Update header
+  document.getElementById('cl-title').textContent = `Unit ${clState.unit}`;
+  document.getElementById('cl-date').textContent = clState.date + (clState.nights ? ` · ${clState.nights} night${clState.nights===1?'':'s'}` : '');
+  // Hide bottom nav
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav) bottomNav.style.display = 'none';
+
+  const ratingDone = clState.ratingDone || (clState.guestRating > 0 && clState.startedAt);
+
+  if (ratingDone) {
+    // Already past rating screen — go straight to checklist
+    document.getElementById('rating-screen').style.display = 'none';
+    document.getElementById('complete-screen').style.display = 'none';
+    const paySection = document.getElementById('complete-pay-section');
+    if (paySection) paySection.style.display = 'none';
+    document.getElementById('cl-body').style.display = 'block';
+    document.getElementById('checklist-screen').style.display = 'block';
+    buildRoomTabs(clState.unit);
+    renderRoom(clState.unit, clState.roomIndex || 0);
+    // Restore active tab highlight
+    const tabs = document.querySelectorAll('.room-tab');
+    tabs.forEach((t,i) => t.classList.toggle('active', i === (clState.roomIndex || 0)));
+  } else {
+    // Still on rating screen
+    document.getElementById('complete-screen').style.display = 'none';
+    document.getElementById('cl-body').style.display = 'none';
+    document.getElementById('checklist-screen').classList.remove('room-tabs-visible');
+    // Restore selected stars
+    document.querySelectorAll('.star-btn').forEach(b => {
+      b.classList.toggle('selected', parseInt(b.dataset.star) <= (clState.guestRating || 0));
+    });
+    if (clState.guestRating > 0) {
+      document.getElementById('start-checklist-btn').style.opacity = '1';
+      document.getElementById('start-checklist-btn').style.pointerEvents = 'auto';
+    }
+    document.getElementById('rating-screen').style.display = 'block';
+    document.getElementById('checklist-screen').style.display = 'block';
   }
 }
 
@@ -1132,7 +1211,7 @@ async function loadCleanerSchedule() {
 
   const rerender = () => {
     renderCleanerSchedule(slots, latestClaims, latestTbdClaims, container, completedKeys);
-    renderHomeTab(slots, latestClaims);
+    renderHomeTab(slots, latestClaims, completedKeys);
   };
 
   // Listen for real-time history updates (completed cleans)
@@ -2096,12 +2175,17 @@ window.switchTab = function(tab) {
 };
 
 // ── Home tab: next clean & my claims ──────────────────────
-function renderHomeTab(slots, claims) {
+function renderHomeTab(slots, claims, completedKeys = new Set()) {
+  const _acc = (currentUser && currentUser.accessLevel) || 'basic';
+
   const mySlots = [];
   for (const { day, checkouts } of slots) {
     for (const { unit, nights } of checkouts) {
       const key = slotKey(day, unit);
       if (claims[key] && claims[key].cleaner === currentUser.name) {
+        // Skip if already completed (key format matches history doc id: YYYY-MM-DD_UNIT)
+        const histKey = `${dayKey(day)}_${unit}`;
+        if (completedKeys.has(histKey)) continue;
         mySlots.push({ day, unit, nights, key });
       }
     }
@@ -2116,7 +2200,6 @@ function renderHomeTab(slots, claims) {
     const { day, unit, nights } = mySlots[0];
     const isToday = sameDay(day, new Date());
     const dateLabel = isToday ? t('today') : formatDay(day);
-    const _acc = (currentUser && currentUser.accessLevel) || 'basic';
     const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
     const ciKey = `${dayKey(day)}_${unit}_ci`;
     const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
@@ -2131,7 +2214,7 @@ function renderHomeTab(slots, claims) {
       </div>`;
   }
 
-  // My claims list
+  // My claims list (upcoming only — completed ones are in Past Cleans)
   const list = document.getElementById('my-claims-list');
   if (mySlots.length === 0) {
     list.textContent = t('noneClaimed');
@@ -2145,7 +2228,7 @@ function renderHomeTab(slots, claims) {
     const dateLabel = isToday ? `<span style="color:var(--accent);font-weight:500;">${t('today')}</span>` : formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
     row.innerHTML = `<span>${dateLabel} — Unit ${unit}${nightLabel}</span>
-      <button style="font-family:\'DM Mono\',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">${t('checklist')}</button>`;
+      <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">${t('checklist')}</button>`;
     list.appendChild(row);
   }
 }
@@ -2212,11 +2295,28 @@ const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
 // Checklist state
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {}, guestRating: 0 };
 
+function saveClState() {
+  if (!currentUser || !clState.unit) return;
+  try { localStorage.setItem('clState_' + currentUser.name, JSON.stringify(clState)); } catch(e) {}
+}
+function clearClState() {
+  if (!currentUser) return;
+  try { localStorage.removeItem('clState_' + currentUser.name); } catch(e) {}
+}
+function loadSavedClState() {
+  if (!currentUser) return null;
+  try {
+    const raw = localStorage.getItem('clState_' + currentUser.name);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
 // Completed cleans available for payment requests (populated by loadMyHistory)
 let _completedCleans = [];
 
 window.openChecklist = function(unit, date, nights) {
   clState = { unit, date, nights: parseInt(nights)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString() };
+  saveClState();
   document.getElementById('cl-title').textContent = `Unit ${unit}`;
   document.getElementById('cl-date').textContent = date + (clState.nights ? ` · ${clState.nights} night${clState.nights===1?'':'s'}` : '');
   document.getElementById('complete-screen').style.display = 'none';
@@ -2237,6 +2337,7 @@ window.openChecklist = function(unit, date, nights) {
 
 window.selectRating = function(stars) {
   clState.guestRating = stars;
+  saveClState();
   document.querySelectorAll('.star-btn').forEach(b => {
     b.classList.toggle('selected', parseInt(b.dataset.star) <= stars);
   });
@@ -2256,6 +2357,8 @@ window.selectRating = function(stars) {
 };
 
 window.startChecklistAfterRating = function() {
+  clState.ratingDone = true;
+  saveClState();
   // Send arrival SMS to Satoru before starting
   const stars = clState.guestRating;
   const starStr = '⭐'.repeat(stars) + (stars < 5 ? ` (${stars}/5)` : '');
@@ -2274,6 +2377,7 @@ window.startChecklistAfterRating = function() {
 };
 
 window.closeChecklist = function() {
+  clearClState(); // only clear if cleaner explicitly taps Back/Back to schedule
   document.getElementById('checklist-screen').style.display = 'none';
   // Restore bottom nav
   const bottomNav = document.querySelector('.bottom-nav');
@@ -2288,7 +2392,7 @@ function buildRoomTabs(unit) {
     const btn = document.createElement('button');
     btn.className = 'room-tab' + (i===0?' active':'');
     btn.textContent = r.name;
-    btn.onclick = () => { clState.roomIndex = i; renderRoom(unit, i); };
+    btn.onclick = () => { clState.roomIndex = i; saveClState(); renderRoom(unit, i); };
     wrap.appendChild(btn);
   });
 }
@@ -2394,6 +2498,7 @@ function attachCarouselSwipe(roomIdx) {
 window.toggleCheck = function(roomIdx, itemIdx) {
   const key = `${roomIdx}-${itemIdx}`;
   clState.checked[key] = !clState.checked[key];
+  saveClState();
   renderRoom(clState.unit, roomIdx);
 };
 
@@ -2436,6 +2541,7 @@ function updateProgress(unit) {
 
 
 window.notifyOwner = async function() {
+  clearClState(); // job is done — no need to resume
   // Write to history collection
   try {
     const { doc, setDoc } = window._fb;
@@ -2472,7 +2578,17 @@ window.sendPaymentFromComplete = async function() {
   const amount = parseFloat(document.getElementById('complete-pay-amount').value) || 0;
   if (amount <= 0) { alert('Enter an amount first.'); return; }
 
+  const cashtag = (currentUser.cashtag || '').trim();
+  if (!cashtag) {
+    alert('No Cash App username on file. Ask Satoru to add your $Cashtag in the admin panel.');
+    return;
+  }
+
   const historyKey = `${clState.date}_${clState.unit}`;
+  const cashAppUrl = `https://cash.app/$${cashtag}/${amount.toFixed(2)}`;
+  const dateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  const lineItem = `  • ${dateLabel} — Unit ${clState.unit}`;
+  const msgBody = `💰 Payment request from ${currentUser.name}\n\n${lineItem}\n\nTotal: $${amount.toFixed(2)}\n\nSend via Cash App:\n${cashAppUrl}`;
 
   // Write paymentRequested to Firestore
   try {
@@ -2484,16 +2600,10 @@ window.sendPaymentFromComplete = async function() {
     });
   } catch(e) { console.error('Payment write failed:', e); }
 
-  // Open Cash App with pre-filled amount
-  const cashtag = (currentUser.cashtag || '').trim();
-  if (!cashtag) {
-    alert('No Cash App username on file. Ask Satoru to add your $Cashtag in the admin panel.');
-    return;
-  }
-  const cashAppUrl = `https://cash.app/$${cashtag}/${amount.toFixed(2)}`;
-  window.location.href = cashAppUrl;
+  // Send SMS to Satoru with Cash App link (same as full payment flow)
+  window.location.href = `sms:${OWNER_PHONE}&body=${encodeURIComponent(msgBody)}`;
 
-  // After Cash App opens, go back to home tab
+  // After SMS app opens, go back to home tab
   setTimeout(() => {
     document.getElementById('checklist-screen').style.display = 'none';
     const bottomNav = document.querySelector('.bottom-nav');
