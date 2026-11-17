@@ -2539,14 +2539,18 @@ window.sendPaymentRequest = async function() {
 };
 
 // ── Admin History ─────────────────────────────────────────
-async function loadAdminHistory() {
+let _adminHistoryUnsub = null;
+
+function loadAdminHistory() {
   const loadingEl = document.getElementById('admin-history-loading');
   const content = document.getElementById('admin-history-content');
   loadingEl.style.display = 'block';
   content.innerHTML = '';
 
-  const { collection, getDocs } = window._fb;
-  const snap = await getDocs(collection(db, 'history'));
+  if (_adminHistoryUnsub) { _adminHistoryUnsub(); _adminHistoryUnsub = null; }
+
+  const { collection, onSnapshot } = window._fb;
+  _adminHistoryUnsub = onSnapshot(collection(db, 'history'), snap => {
   loadingEl.style.display = 'none';
 
   if (snap.empty) {
@@ -2616,6 +2620,7 @@ async function loadAdminHistory() {
     }
     content.appendChild(block);
   }
+  }); // end onSnapshot
 }
 
 window.adminMarkPaid = async function(key) {
@@ -2623,7 +2628,7 @@ window.adminMarkPaid = async function(key) {
   try {
     const { doc, updateDoc } = window._fb;
     await updateDoc(doc(db, 'history', key), { paid: true, paidAt: new Date().toISOString() });
-    loadAdminHistory(); // refresh admin view
+    // onSnapshot will auto-refresh the admin history view
   } catch(e) { alert('Could not mark paid: ' + e.message); }
 };
 
