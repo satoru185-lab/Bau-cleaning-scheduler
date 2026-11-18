@@ -1074,13 +1074,30 @@ function getNights(events, day) {
 
 // Shared iCal cache so we only fetch once per session
 let _icalCache = null;
+let _icalErrors = {};
 async function fetchAllICals() {
   if (_icalCache) return _icalCache;
   const icals = {};
+  _icalErrors = {};
   await Promise.all(UNITS.map(async u => {
-    try { icals[u] = parseICal(await fetchICal(u)); } catch { icals[u] = []; }
+    try {
+      const text = await fetchICal(u);
+      if (!text || text.trim().length < 20) {
+        _icalErrors[u] = 'empty response';
+        icals[u] = [];
+      } else {
+        icals[u] = parseICal(text);
+      }
+    } catch(e) {
+      _icalErrors[u] = e.message || 'fetch failed';
+      icals[u] = [];
+    }
   }));
   _icalCache = icals;
+  // Warn in console so we can diagnose
+  const failed = Object.keys(_icalErrors);
+  if (failed.length) console.warn('iCal fetch failed for units:', _icalErrors);
+  else console.log('iCal loaded OK — events per unit:', Object.fromEntries(UNITS.map(u => [u, icals[u].length])));
   return icals;
 }
 
@@ -1235,6 +1252,18 @@ async function loadCleanerSchedule() {
 
   const slots = await getCheckoutSlots();
   loading.style.display = 'none';
+
+  // Show warning banner if iCal failed to load
+  const failedUnits = Object.keys(_icalErrors);
+  const existingBanner = document.getElementById('ical-error-banner');
+  if (existingBanner) existingBanner.remove();
+  if (failedUnits.length) {
+    const banner = document.createElement('div');
+    banner.id = 'ical-error-banner';
+    banner.style.cssText = 'background:#fff3cd;border:1px solid #f0c040;border-radius:6px;padding:0.6rem 0.9rem;margin-bottom:0.75rem;font-size:0.78rem;color:#7a5c00;';
+    banner.innerHTML = `⚠️ Schedule data couldn't load for Unit${failedUnits.length>1?'s':''} ${failedUnits.join(', ')} — showing as TBD. Try refreshing. <button onclick="this.closest('div').remove();_icalCache=null;loadCleanerSchedule();" style="margin-left:0.5rem;font-size:0.72rem;border:1px solid #c8a830;background:none;border-radius:3px;padding:0.1rem 0.4rem;cursor:pointer;color:#7a5c00;">Retry</button>`;
+    container.parentElement.insertBefore(banner, container);
+  }
 
   const { collection, onSnapshot } = window._fb;
   let latestClaims = {};
