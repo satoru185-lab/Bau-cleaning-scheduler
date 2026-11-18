@@ -1405,7 +1405,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       } else if (otherPreClaimed && access === 'full') {
         tbdRight = `<span style="font-size:0.72rem;color:var(--muted);">Waitlisted: ${tbdClaim.cleaner}</span>`;
       } else if (otherPreClaimed) {
-        tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:4px;padding:0.15rem 0.5rem;">TBD</span>`;
+        tbdRight = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${t('taken')}</span>`;
       } else {
         tbdRight = `<button class="claim-btn claim" style="font-size:0.68rem;white-space:nowrap;" onclick="claimTbd('${tbdKey}', '${dayKey(day)}', '${unit}')">${t('claimIfAvailable')}</button>`;
       }
