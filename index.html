@@ -2538,7 +2538,6 @@ window.startChecklistAfterRating = function() {
   const starStr = '⭐'.repeat(stars) + (stars < 5 ? ` (${stars}/5)` : '');
   logActivity('rating', `Guest rating ${starStr} — Unit ${clState.unit}`, { unit: clState.unit, date: clState.date, rating: stars });
   logActivity('start', `Started cleaning Unit ${clState.unit}`, { unit: clState.unit, date: clState.date });
-  notifySatoru(`🧹 Unit ${clState.unit} cleaning started`, `${currentUser.name} started Unit ${clState.unit} · Guest left it ${starStr}`, 'broom');
   // Send arrival SMS to Satoru before starting
   const dateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
   const msg = encodeURIComponent(`🧹 ${currentUser.name} is starting Unit ${clState.unit} (${dateLabel}) · Guest cleanliness: ${starStr}`);
