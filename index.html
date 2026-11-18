@@ -1891,20 +1891,34 @@ let _previewTbdClaims = {};
 let _previewSlots = null;
 let _previewListenersStarted = false;
 
+function _doRenderPreview() {
+  const container = document.getElementById('admin-preview-content');
+  const sel = document.getElementById('preview-access-select');
+  const descEl = document.getElementById('preview-access-desc');
+  if (!container || !sel || !_previewSlots) return;
+  const access = sel.value;
+  if (descEl) descEl.textContent = PREVIEW_ACCESS_DESC[access] || '';
+  const fakeUser = { name: '(Preview)', role: 'cleaner', accessLevel: access, scheduleDays: 60 };
+  const savedUser = currentUser;
+  currentUser = fakeUser;
+  renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, new Set());
+  currentUser = savedUser;
+}
+
 async function renderPreviewSchedule() {
   const container = document.getElementById('admin-preview-content');
   const loading = document.getElementById('admin-preview-loading');
   const sel = document.getElementById('preview-access-select');
-  const descEl = document.getElementById('preview-access-desc');
   if (!container || !sel) return;
-
-  const access = sel.value;
-  descEl.textContent = PREVIEW_ACCESS_DESC[access] || '';
 
   // Load slots once, then reuse
   if (!_previewSlots) {
     loading.style.display = 'block';
+    // Temporarily set a full-access fake user so getCheckoutSlots uses 60-day window
+    const savedUser = currentUser;
+    currentUser = { ...currentUser, scheduleDays: 60 };
     _previewSlots = await getCheckoutSlots();
+    currentUser = savedUser;
     loading.style.display = 'none';
   }
 
@@ -1915,21 +1929,16 @@ async function renderPreviewSchedule() {
     onSnapshot(collection(db, 'claims'), snap => {
       _previewClaims = {};
       snap.forEach(d => { _previewClaims[d.id] = d.data(); });
-      if (document.getElementById('admin-preview').style.display !== 'none') renderPreviewSchedule();
+      if (document.getElementById('admin-preview').style.display !== 'none') _doRenderPreview();
     });
     onSnapshot(collection(db, 'tbd_claims'), snap => {
       _previewTbdClaims = {};
       snap.forEach(d => { _previewTbdClaims[d.id] = d.data(); });
-      if (document.getElementById('admin-preview').style.display !== 'none') renderPreviewSchedule();
+      if (document.getElementById('admin-preview').style.display !== 'none') _doRenderPreview();
     });
   }
 
-  // Build a fake currentUser context for the renderer
-  const fakeUser = { name: '(Preview)', role: 'cleaner', accessLevel: access };
-  const savedUser = currentUser;
-  currentUser = fakeUser;
-  renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, new Set());
-  currentUser = savedUser;
+  _doRenderPreview();
 }
 
 // ── Admin — Units management ───────────────────────────────
