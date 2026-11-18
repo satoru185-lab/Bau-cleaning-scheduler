@@ -1386,6 +1386,9 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       const iMePreClaimed = tbdClaim && tbdClaim.cleaner === currentUser.name;
       const otherPreClaimed = tbdClaim && !iMePreClaimed;
 
+      // Basic/viewonly: hide slots already claimed by someone else
+      if (otherPreClaimed && (access === 'basic' || access === 'viewonly')) continue;
+
       const slotEl = document.createElement('div');
       slotEl.className = 'slot tbd-slot';
 
