@@ -611,6 +611,7 @@ body { padding-bottom: 5rem; }
       <div class="tabs" id="admin-tabs">
         <button class="tab active" onclick="showAdminTab('activity')">Activity</button>
         <button class="tab" onclick="showAdminTab('overview')">Schedule</button>
+        <button class="tab" onclick="showAdminTab('preview')">Preview</button>
         <button class="tab" onclick="showAdminTab('history')">History</button>
         <button class="tab" onclick="showAdminTab('cleaners')">Cleaners</button>
         <button class="tab" onclick="showAdminTab('units')">Units</button>
@@ -644,6 +645,22 @@ body { padding-bottom: 5rem; }
       </div>
 
       <!-- Cleaners tab -->
+      <div id="admin-preview" style="display:none;">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
+          <span style="font-size:0.78rem;color:var(--muted);">Viewing as:</span>
+          <select id="preview-access-select" onchange="renderPreviewSchedule()"
+            style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;background:var(--paper);cursor:pointer;">
+            <option value="full">Full Access</option>
+            <option value="standard">Standard</option>
+            <option value="basic" selected>Basic</option>
+            <option value="viewonly">View Only</option>
+          </select>
+          <span id="preview-access-desc" style="font-size:0.72rem;color:var(--muted);"></span>
+        </div>
+        <div id="admin-preview-loading" class="loading"><span class="spinner"></span>Loading preview...</div>
+        <div id="admin-preview-content"></div>
+      </div>
+
       <div id="admin-cleaners" style="display:none;">
         <div class="card">
           <div class="card-title">Add Cleaner</div>
@@ -1825,10 +1842,66 @@ window.showAdminTab = function(tab) {
   document.getElementById('admin-history').style.display   = tab==='history'   ? 'block' : 'none';
   document.getElementById('admin-cleaners').style.display  = tab==='cleaners'  ? 'block' : 'none';
   document.getElementById('admin-activity').style.display  = tab==='activity'  ? 'block' : 'none';
+  document.getElementById('admin-preview').style.display   = tab==='preview'   ? 'block' : 'none';
   if (tab === 'units') renderUnitCards();
   if (tab === 'history') loadAdminHistory();
   if (tab === 'activity') loadAdminActivity();
+  if (tab === 'preview') renderPreviewSchedule();
 };
+
+// ── Admin — Cleaner Preview ────────────────────────────────
+const PREVIEW_ACCESS_DESC = {
+  full:     'Sees all cleaner names, nights, TBD waitlist details',
+  standard: 'Sees cleaner names and can claim; TBD slots visible',
+  basic:    'Sees taken/available only; can claim open slots',
+  viewonly: 'Read-only: sees only slots assigned to them',
+};
+
+let _previewClaims = {};
+let _previewTbdClaims = {};
+let _previewSlots = null;
+let _previewListenersStarted = false;
+
+async function renderPreviewSchedule() {
+  const container = document.getElementById('admin-preview-content');
+  const loading = document.getElementById('admin-preview-loading');
+  const sel = document.getElementById('preview-access-select');
+  const descEl = document.getElementById('preview-access-desc');
+  if (!container || !sel) return;
+
+  const access = sel.value;
+  descEl.textContent = PREVIEW_ACCESS_DESC[access] || '';
+
+  // Load slots once, then reuse
+  if (!_previewSlots) {
+    loading.style.display = 'block';
+    _previewSlots = await getCheckoutSlots();
+    loading.style.display = 'none';
+  }
+
+  // Start real-time listeners once
+  if (!_previewListenersStarted) {
+    _previewListenersStarted = true;
+    const { collection, onSnapshot } = window._fb;
+    onSnapshot(collection(db, 'claims'), snap => {
+      _previewClaims = {};
+      snap.forEach(d => { _previewClaims[d.id] = d.data(); });
+      if (document.getElementById('admin-preview').style.display !== 'none') renderPreviewSchedule();
+    });
+    onSnapshot(collection(db, 'tbd_claims'), snap => {
+      _previewTbdClaims = {};
+      snap.forEach(d => { _previewTbdClaims[d.id] = d.data(); });
+      if (document.getElementById('admin-preview').style.display !== 'none') renderPreviewSchedule();
+    });
+  }
+
+  // Build a fake currentUser context for the renderer
+  const fakeUser = { name: '(Preview)', role: 'cleaner', accessLevel: access };
+  const savedUser = currentUser;
+  currentUser = fakeUser;
+  renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, new Set());
+  currentUser = savedUser;
+}
 
 // ── Admin — Units management ───────────────────────────────
 function renderUnitCards() {
@@ -2460,9 +2533,13 @@ window.selectRating = function(stars) {
 window.startChecklistAfterRating = function() {
   clState.ratingDone = true;
   saveClState();
-  // Send arrival SMS to Satoru before starting
+  // Log rating + start events
   const stars = clState.guestRating;
   const starStr = '⭐'.repeat(stars) + (stars < 5 ? ` (${stars}/5)` : '');
+  logActivity('rating', `Guest rating ${starStr} — Unit ${clState.unit}`, { unit: clState.unit, date: clState.date, rating: stars });
+  logActivity('start', `Started cleaning Unit ${clState.unit}`, { unit: clState.unit, date: clState.date });
+  notifySatoru(`🧹 Unit ${clState.unit} cleaning started`, `${currentUser.name} started Unit ${clState.unit} · Guest left it ${starStr}`, 'broom');
+  // Send arrival SMS to Satoru before starting
   const dateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
   const msg = encodeURIComponent(`🧹 ${currentUser.name} is starting Unit ${clState.unit} (${dateLabel}) · Guest cleanliness: ${starStr}`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
