@@ -648,7 +648,7 @@ body { padding-bottom: 5rem; }
       <div id="admin-preview" style="display:none;">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
           <span style="font-size:0.78rem;color:var(--muted);">Viewing as:</span>
-          <select id="preview-access-select" onchange="_previewSlots ? _doRenderPreview() : renderPreviewSchedule()"
+          <select id="preview-access-select" onchange="window._previewSlots ? window._doRenderPreview() : window.renderPreviewSchedule()"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;background:var(--paper);cursor:pointer;">
             <option value="full">Full Access</option>
             <option value="standard">Standard</option>
@@ -1884,7 +1884,7 @@ window.showAdminTab = function(tab) {
   if (tab === 'units') renderUnitCards();
   if (tab === 'history') loadAdminHistory();
   if (tab === 'activity') loadAdminActivity();
-  if (tab === 'preview') renderPreviewSchedule();
+  if (tab === 'preview') window.renderPreviewSchedule();
 };
 
 // ── Admin — Cleaner Preview ────────────────────────────────
@@ -1900,7 +1900,7 @@ let _previewTbdClaims = {};
 let _previewSlots = null;
 let _previewListenersStarted = false;
 
-function _doRenderPreview() {
+window._doRenderPreview = function _doRenderPreview() {
   const container = document.getElementById('admin-preview-content');
   const sel = document.getElementById('preview-access-select');
   const descEl = document.getElementById('preview-access-desc');
@@ -1914,7 +1914,7 @@ function _doRenderPreview() {
   currentUser = savedUser;
 }
 
-async function renderPreviewSchedule() {
+window.renderPreviewSchedule = async function renderPreviewSchedule() {
   const container = document.getElementById('admin-preview-content');
   const loading = document.getElementById('admin-preview-loading');
   const sel = document.getElementById('preview-access-select');
