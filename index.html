@@ -1147,16 +1147,13 @@ async function getCheckoutSlots() {
             const dateLabel = new Date(dayKey(day) + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
             const smsText = encodeURIComponent(`Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. See the app for details.`);
             const smsLink = cleanerPhone ? `sms:${cleanerPhone}&body=${smsText}` : '';
-            await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-              method: 'POST',
-              headers: {
-                'Title': `${cleanerName} → Unit ${unit} confirmed`,
-                'Priority': 'high',
-                'Tags': 'white_check_mark',
-                ...(smsLink ? { 'Actions': `view, Text ${cleanerName}, ${smsLink}` } : {})
-              },
-              body: `${cleanerName} was auto-assigned Unit ${unit} on ${dateLabel} from their waitlist.${cleanerPhone ? ' Tap to send confirmation text.' : ''}`
-            });
+            const extraHeaders = smsLink ? { 'Actions': `view, Text ${cleanerName}, ${smsLink}` } : {};
+            notifySatoru(
+              `✅ ${cleanerName} → Unit ${unit} confirmed`,
+              `${cleanerName} was auto-assigned Unit ${unit} on ${dateLabel} from their waitlist.${cleanerPhone ? ' Tap to send confirmation text.' : ''}`,
+              'white_check_mark',
+              extraHeaders
+            );
           } catch(e) { console.warn('Auto-assign notification failed:', e); }
         }
       }
@@ -1526,13 +1523,20 @@ window.claimTbd = async function(tbdKey, date, unit) {
     date, unit,
     claimedAt: new Date().toISOString()
   });
+  const tbdDateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  notifySatoru(`⏳ Unit ${unit} waitlisted`, `${currentUser.name} joined waitlist for Unit ${unit} on ${tbdDateLabel} (TBD slot)`, 'hourglass_flowing_sand');
+  logActivity('tbd_claim', `Joined waitlist for Unit ${unit}`, { unit, date });
 };
 
 window.cancelTbdClaim = async function(tbdKey) {
   const { doc, deleteDoc, getDoc } = window._fb;
   const snap = await getDoc(doc(db, 'tbd_claims', tbdKey));
   if (snap.exists() && snap.data().cleaner === currentUser.name) {
+    const { date, unit } = snap.data();
     await deleteDoc(doc(db, 'tbd_claims', tbdKey));
+    const tbdDateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    notifySatoru(`❌ Unit ${unit} waitlist cancelled`, `${currentUser.name} removed themselves from Unit ${unit} waitlist on ${tbdDateLabel}`, 'x');
+    logActivity('tbd_cancel', `Left waitlist for Unit ${unit}`, { unit, date });
   }
 };
 
@@ -1557,19 +1561,9 @@ window.claimSlot = async function(key, date, unit) {
   if (tbdSnap.exists() && tbdSnap.data().cleaner === currentUser.name) {
     await deleteDoc(doc(db, 'tbd_claims', key));
   }
-  // Push notification to Satoru via Ntfy.sh
-  try {
-    const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-      method: 'POST',
-      headers: {
-        'Title': `Unit ${unit} claimed`,
-        'Priority': 'default',
-        'Tags': 'broom'
-      },
-      body: `${currentUser.name} claimed Unit ${unit} on ${dateLabel}`
-    });
-  } catch(e) { /* silent — don't block the claim if notification fails */ }
+  // Push notification to Satoru
+  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  notifySatoru(`📋 Unit ${unit} claimed`, `${currentUser.name} claimed Unit ${unit} on ${dateLabel}`);
   // Log activity
   logActivity('claim', `Claimed Unit ${unit}`, { unit, date });
   // Queue this slot and show/refresh the calendar prompt
@@ -1583,18 +1577,8 @@ window.unclaim = async function(key) {
   if (snap.exists() && snap.data().cleaner === currentUser.name) {
     const { date, unit } = snap.data();
     await deleteDoc(doc(db, 'claims', key));
-    try {
-      const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-        method: 'POST',
-        headers: {
-          'Title': `Unit ${unit} released`,
-          'Priority': 'default',
-          'Tags': 'warning'
-        },
-        body: `${currentUser.name} released Unit ${unit} on ${dateLabel} — slot is now open`
-      });
-    } catch(e) { /* silent */ }
+    const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    notifySatoru(`↩️ Unit ${unit} released`, `${currentUser.name} released Unit ${unit} on ${dateLabel} — slot is now open`, 'warning');
     logActivity('unclaim', `Released Unit ${unit}`, { unit, date });
   }
 };
@@ -1616,26 +1600,36 @@ async function loadAdminSchedule() {
 
   const { collection, onSnapshot } = window._fb;
 
+  let latestAdminClaims = {};
+  let latestAdminTbdClaims = {};
+  let adminCompletedKeys = new Set();
+
+  function reRenderAdmin() {
+    renderAdminSchedule(adminFullSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys);
+  }
+
   onSnapshot(collection(db, 'cleaners'), snap => {
     adminCleanerNames = [];
     snap.forEach(d => adminCleanerNames.push(d.data().name));
-    // Re-render so Assign dropdown appears now that cleaner names are loaded
-    renderAdminSchedule(adminFullSlots, latestAdminClaims, container, adminCompletedKeys);
+    reRenderAdmin();
   });
-
-  let latestAdminClaims = {};
-  let adminCompletedKeys = new Set();
 
   onSnapshot(collection(db, 'history'), histSnap => {
     adminCompletedKeys = new Set();
     histSnap.forEach(d => { adminCompletedKeys.add(d.id); });
-    renderAdminSchedule(adminFullSlots, latestAdminClaims, container, adminCompletedKeys);
+    reRenderAdmin();
   });
 
   onSnapshot(collection(db, 'claims'), snap => {
     latestAdminClaims = {};
     snap.forEach(d => { latestAdminClaims[d.id] = d.data(); });
-    renderAdminSchedule(adminFullSlots, latestAdminClaims, container, adminCompletedKeys);
+    reRenderAdmin();
+  });
+
+  onSnapshot(collection(db, 'tbd_claims'), snap => {
+    latestAdminTbdClaims = {};
+    snap.forEach(d => { latestAdminTbdClaims[d.id] = d.data(); });
+    reRenderAdmin();
   });
 }
 
@@ -1649,7 +1643,8 @@ const STATUS_CONFIG = {
   unavailable: { label: 'N/A (Unit E)',   bg: '#f0ece4', border: '#c8b89a', color: '#a08060' },
 };
 
-function renderAdminSchedule(slots, claims, container, completedKeys = new Set()) {
+function renderAdminSchedule(slots, claims, tbdClaims, container, completedKeys = new Set()) {
+  if (typeof tbdClaims === 'undefined') tbdClaims = {}; // backward compat
   container.innerHTML = '';
 
   // Summary counts
@@ -1703,6 +1698,7 @@ function renderAdminSchedule(slots, claims, container, completedKeys = new Set()
       const histKey = `${dayKey(day)}_${unit}`;
       const ciKey = `${dayKey(day)}_${unit}_ci`; // separate key for checkin time
       const claim = claims[key];
+      const tbdClaim = tbdClaims[key]; // waitlist entry for TBD/open slots
       const isDone = completedKeys.has(histKey);
       const nightLabel = nights ? `${nights}n` : '';
 
@@ -1753,13 +1749,21 @@ function renderAdminSchedule(slots, claims, container, completedKeys = new Set()
         }
       }
 
+      // TBD waitlist badge — shown on open/unavailable slots that someone has waitlisted
+      let tbdHtml = '';
+      if (tbdClaim && !claim && !isDone) {
+        tbdHtml = `<div style="margin-top:0.35rem;padding:0.2rem 0.4rem;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;font-size:0.68rem;color:#7a5c00;">
+          ⏳ Waitlisted: <strong>${tbdClaim.cleaner}</strong>
+        </div>`;
+      }
+
       cell.innerHTML = `
         <div style="display:flex;align-items:baseline;justify-content:space-between;">
           <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
         <div style="color:${isDone ? '#1a4a30' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
-        ${checkinHtml}${assignHtml}`;
+        ${checkinHtml}${assignHtml}${tbdHtml}`;
       grid.appendChild(cell);
     }
 
@@ -2378,6 +2382,17 @@ const OWNER_CASHTAG = 'SatoruBauman';
 // Ntfy.sh push notification topic (Satoru's private channel)
 const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
 
+// Send a push notification to Satoru via ntfy.sh
+async function notifySatoru(title, body, tags = 'broom', extraHeaders = {}) {
+  try {
+    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+      method: 'POST',
+      headers: { 'Title': title, 'Priority': 'default', 'Tags': tags, ...extraHeaders },
+      body
+    });
+  } catch(e) { /* silent */ }
+}
+
 // Checklist state
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {}, guestRating: 0 };
 
@@ -2644,8 +2659,10 @@ window.notifyOwner = async function() {
     });
   } catch(e) { console.error('History write failed:', e); }
 
-  // Log activity
+  // Log activity and notify Satoru
   logActivity('complete', `Completed clean — Unit ${clState.unit} ready`, { unit: clState.unit, date: clState.date });
+  const compDateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  notifySatoru(`🧹 Unit ${clState.unit} cleaned!`, `${currentUser.name} completed Unit ${clState.unit} on ${compDateLabel} — ready for check-in`, 'sparkles');
   // Send a simple "unit is ready" SMS — no payment in this message
   const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
@@ -2688,6 +2705,7 @@ window.sendPaymentFromComplete = async function() {
     });
   } catch(e) { console.error('Payment write failed:', e); }
   logActivity('payment_request', `Requested payment $${amount.toFixed(2)} — Unit ${clState.unit}`, { unit: clState.unit, date: clState.date, amount });
+  notifySatoru(`💰 Payment request $${amount.toFixed(2)}`, `${currentUser.name} requests $${amount.toFixed(2)} for Unit ${clState.unit} on ${dateLabel}`, 'moneybag');
 
   // Send SMS to Satoru with Cash App link (same as full payment flow)
   window.location.href = `sms:${OWNER_PHONE}&body=${encodeURIComponent(msgBody)}`;
@@ -2785,6 +2803,7 @@ window.sendPaymentRequest = async function() {
     } catch(e) { /* non-blocking — SMS still sends */ }
   }
 
+  notifySatoru(`💰 Payment request $${amount.toFixed(2)}`, `${cleanerName} requests $${amount.toFixed(2)} for ${selected.length} clean${selected.length > 1 ? 's' : ''}`, 'moneybag');
   window.location.href = `sms:${OWNER_PHONE}&body=${encodeURIComponent(msgBody)}`;
   setTimeout(() => { togglePaymentMode(); loadMyHistory(); }, 600);
 };
@@ -2884,6 +2903,7 @@ window.adminMarkPaid = async function(key) {
     const parts = key.split('_'); // key = date_unit
     const unit = parts.length >= 2 ? parts[parts.length - 1] : key;
     logActivity('paid', `Marked paid`, { unit, historyKey: key });
+    notifySatoru(`✅ Payment marked paid`, `Unit ${unit} payment marked as paid`, 'white_check_mark');
   } catch(e) { alert('Could not mark paid: ' + e.message); }
 };
 
@@ -3050,14 +3070,8 @@ window.markCleanDone = async function(claimKey, unit, date, nights) {
       manualEntry: true
     });
     // Send ntfy notification to Satoru
-    try {
-      const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
-      await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-        method: 'POST',
-        headers: { 'Title': `Unit ${unit} clean logged (${dateLabel})`, 'Tags': 'white_check_mark' },
-        body: `${currentUser.name} marked Unit ${unit} on ${dateLabel} as completed (manual entry).`
-      });
-    } catch(e) { /* ntfy optional */ }
+    const dateLabel2 = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    notifySatoru(`✅ Unit ${unit} clean logged (${dateLabel2})`, `${currentUser.name} marked Unit ${unit} on ${dateLabel2} as completed (manual entry).`, 'white_check_mark');
     loadMyHistory();
   } catch(e) {
     alert('Could not save: ' + e.message);
