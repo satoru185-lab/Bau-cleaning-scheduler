@@ -1325,8 +1325,8 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       return true;
     });
 
-    // TBD slots: hide for tomorrow after 11 PM (booking window closed, no cleaning will happen)
-    const isPastTbdCutoff = (() => {
+    // TBD slots: hide for today (booking window was last night) and for tomorrow after 11 PM
+    const isPastTbdCutoff = isTodayDay || (() => {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       return sameDay(day, tomorrow) && new Date().getHours() >= 23;
