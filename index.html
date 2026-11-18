@@ -648,7 +648,7 @@ body { padding-bottom: 5rem; }
       <div id="admin-preview" style="display:none;">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
           <span style="font-size:0.78rem;color:var(--muted);">Viewing as:</span>
-          <select id="preview-access-select" onchange="renderPreviewSchedule()"
+          <select id="preview-access-select" onchange="_previewSlots ? _doRenderPreview() : renderPreviewSchedule()"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;background:var(--paper);cursor:pointer;">
             <option value="full">Full Access</option>
             <option value="standard">Standard</option>
