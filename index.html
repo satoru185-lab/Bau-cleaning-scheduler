@@ -1312,12 +1312,22 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
     const isPastDay = day < today;
     const isTodayDay = sameDay(day, today);
 
+    // 11 PM cutoff: if it's past 11 PM tonight, tomorrow's unclaimed slots are closed
+    const now = new Date();
+    const isPastCutoff = (() => {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return sameDay(day, tomorrow) && now.getHours() >= 23;
+    })();
+
     const visibleSlots = checkouts.filter(({unit}) => {
       const key = slotKey(day, unit);
       const histKey = `${dayKey(day)}_${unit}`;
       const claim = claims[key];
       // For past days: only show if this cleaner has a claim or completed entry
       if (isPastDay) return (claim && claim.cleaner === currentUser.name) || completedKeys.has(histKey);
+      // Past 11 PM cutoff: hide unclaimed slots (still show if claimed or completed)
+      if (isPastCutoff && !claim && !completedKeys.has(histKey)) return false;
       // viewonly: only slots assigned to me
       if (access === 'viewonly') return claim && claim.cleaner === currentUser.name;
       // basic: only open or mine
@@ -1325,7 +1335,8 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       return true;
     });
 
-    const visibleTbd = (!isPastDay && seeTbd) ? (tbd || []) : [];
+    // Past 11 PM cutoff: TBD slots for tomorrow are also hidden (booking window closed)
+    const visibleTbd = (!isPastDay && !isPastCutoff && seeTbd) ? (tbd || []) : [];
 
     if (visibleSlots.length === 0 && visibleTbd.length === 0) continue;
     const block = document.createElement('div');
