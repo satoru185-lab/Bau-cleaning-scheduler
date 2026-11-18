@@ -648,7 +648,7 @@ body { padding-bottom: 5rem; }
       <div id="admin-preview" style="display:none;">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
           <span style="font-size:0.78rem;color:var(--muted);">Viewing as:</span>
-          <select id="preview-access-select" onchange="window._previewSlots ? window._doRenderPreview() : window.renderPreviewSchedule()"
+          <select id="preview-access-select"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;background:var(--paper);cursor:pointer;">
             <option value="full">Full Access</option>
             <option value="standard">Standard</option>
@@ -1920,16 +1920,20 @@ window.renderPreviewSchedule = async function renderPreviewSchedule() {
   const sel = document.getElementById('preview-access-select');
   if (!container || !sel) return;
 
-  // Load slots once, then reuse
-  if (!_previewSlots) {
-    loading.style.display = 'block';
-    // Temporarily set a full-access fake user so getCheckoutSlots uses 60-day window
-    const savedUser = currentUser;
-    currentUser = { ...currentUser, scheduleDays: 60 };
-    _previewSlots = await getCheckoutSlots();
-    currentUser = savedUser;
-    loading.style.display = 'none';
+  // Attach dropdown listener once
+  if (!sel._previewListenerAttached) {
+    sel._previewListenerAttached = true;
+    sel.addEventListener('change', () => window._doRenderPreview());
   }
+
+  // Always re-fetch slots (clears cache so today's TBD cutoff is fresh)
+  loading.style.display = 'block';
+  _icalCache = null; // force fresh iCal fetch
+  const savedUser = currentUser;
+  currentUser = { ...currentUser, scheduleDays: 60 };
+  _previewSlots = await getCheckoutSlots();
+  currentUser = savedUser;
+  loading.style.display = 'none';
 
   // Start real-time listeners once
   if (!_previewListenersStarted) {
@@ -1938,16 +1942,16 @@ window.renderPreviewSchedule = async function renderPreviewSchedule() {
     onSnapshot(collection(db, 'claims'), snap => {
       _previewClaims = {};
       snap.forEach(d => { _previewClaims[d.id] = d.data(); });
-      if (document.getElementById('admin-preview').style.display !== 'none') _doRenderPreview();
+      if (document.getElementById('admin-preview').style.display !== 'none') window._doRenderPreview();
     });
     onSnapshot(collection(db, 'tbd_claims'), snap => {
       _previewTbdClaims = {};
       snap.forEach(d => { _previewTbdClaims[d.id] = d.data(); });
-      if (document.getElementById('admin-preview').style.display !== 'none') _doRenderPreview();
+      if (document.getElementById('admin-preview').style.display !== 'none') window._doRenderPreview();
     });
   }
 
-  _doRenderPreview();
+  window._doRenderPreview();
 }
 
 // ── Admin — Units management ───────────────────────────────
