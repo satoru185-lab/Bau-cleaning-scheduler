@@ -1735,8 +1735,9 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         if (claims[k]) claimedCount++;
         if (completedKeys.has(k)) doneCount++;
       }
-      // Occupancy: count non-E units only (A/B/C/F = 4 rentable units)
-      if (unit !== 'E' && status !== 'unavailable') {
+      // Occupancy: all 5 rentable units (A/B/C/E/F), skip unavailable A/B days when E is active
+      // (those days E is counted instead, so we don't double-count)
+      if (status !== 'unavailable') {
         possibleNights++;
         if (status && status !== 'open') bookedNights++;
       }
@@ -1773,7 +1774,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
       ${readyLine}
-      <span style="color:var(--muted);">📅 ${bookedNights}/${possibleNights} nights booked (60 days)</span>
+      <span style="color:var(--muted);">📅 ${bookedNights}/${possibleNights} nights booked</span>
       <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts covered</span>
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
