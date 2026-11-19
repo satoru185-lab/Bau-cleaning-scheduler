@@ -711,7 +711,7 @@ const TRANSLATIONS = {
     noneClaimed: 'None claimed yet.', noHistory: 'No completed cleans yet.',
     today: 'Today', available: 'Available', yourClaim: 'Your claim',
     claimed: '✓ Claimed', assigned: '✓ Assigned', release: 'Release',
-    taken: 'Taken', unavailable: 'Unavailable',
+    taken: 'Taken', tbdTaken: 'TBD taken', unavailable: 'Unavailable',
     claim: 'Claim', checklist: 'Checklist', resume: 'Resume', inProgress: 'In progress',
     openChecklist: 'Open cleaning checklist →', doneBy: 'Done by',
     tbdTitle: 'TBD — Not booked yet', claimIfAvailable: 'Claim if Available',
@@ -735,7 +735,7 @@ const TRANSLATIONS = {
     noneClaimed: 'Ninguna reclamada aún.', noHistory: 'No hay limpiezas completadas aún.',
     today: 'Hoy', available: 'Disponible', yourClaim: 'Tu turno',
     claimed: '✓ Reclamado', assigned: '✓ Asignado', release: 'Liberar',
-    taken: 'Ocupado', unavailable: 'No disponible',
+    taken: 'Ocupado', tbdTaken: 'TBD ocupado', unavailable: 'No disponible',
     claim: 'Reclamar', checklist: 'Lista', resume: 'Continuar', inProgress: 'En progreso',
     openChecklist: 'Abrir lista de limpieza →', doneBy: 'Listo antes de',
     tbdTitle: 'Por definir — Sin reserva', claimIfAvailable: 'Reclamar si se confirma',
@@ -1411,12 +1411,12 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
           <span class="slot-label" style="color:var(--muted);">${t('tbdTitle')}</span>
           ${tbdRight}`;
       } else if (otherPreClaimed) {
-        // Show as a regular claimed-other slot — no TBD styling
-        slotEl.className = 'slot claimed-other';
-        const label = access === 'full' ? `Waitlisted: ${tbdClaim.cleaner}` : t('taken');
-        slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-          <span class="slot-label"></span>
-          <span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
+        // Show as a TBD-taken slot — dashed border, distinct from confirmed claimed
+        slotEl.className = 'slot tbd-slot';
+        const label = access === 'full' ? `TBD waitlisted: ${tbdClaim.cleaner}` : t('tbdTaken');
+        slotEl.innerHTML = `<span class="slot-unit" style="color:#b07d2a;">Unit ${unit}</span>
+          <span class="slot-label" style="color:var(--muted);">${t('tbdTitle')}</span>
+          <span class="slot-claimer" style="color:#b07d2a;font-size:0.78rem;">◑ ${label}</span>`;
       } else {
         slotEl.className = 'slot tbd-slot';
         tbdRight = `<button class="claim-btn claim" style="font-size:0.68rem;white-space:nowrap;" onclick="claimTbd('${tbdKey}', '${dayKey(day)}', '${unit}')">${t('claimIfAvailable')}</button>`;
