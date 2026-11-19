@@ -1962,6 +1962,7 @@ window.showAdminTab = function(tab) {
 window.viewAsCleanerFromTab = function(name, accessLevel, scheduleDays) {
   window._previewCleanerName = name;
   window._previewScheduleDays = scheduleDays || 14;
+  _previewSlots = null; // force re-fetch with correct window
   const tabs = document.querySelectorAll('#admin-tabs .tab');
   tabs.forEach(t => { if (t.textContent.trim() === 'Preview') t.click(); });
   setTimeout(() => {
@@ -2013,11 +2014,11 @@ window.renderPreviewSchedule = async function renderPreviewSchedule() {
     sel.addEventListener('change', () => window._doRenderPreview());
   }
 
-  // Always re-fetch slots (clears cache so today's TBD cutoff is fresh)
+  // Fetch slots using the preview cleaner's schedule window (or 60 as default)
   loading.style.display = 'block';
   _icalCache = null; // force fresh iCal fetch
   const savedUser = currentUser;
-  currentUser = { ...currentUser, scheduleDays: 60 };
+  currentUser = { ...currentUser, scheduleDays: window._previewScheduleDays || 60 };
   _previewSlots = await getCheckoutSlots();
   currentUser = savedUser;
   loading.style.display = 'none';
