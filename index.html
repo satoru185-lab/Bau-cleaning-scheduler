@@ -1109,8 +1109,9 @@ async function getCheckoutSlots() {
   const days = getDays(windowDays, showPast);
   // tbdByDay[dateString] = [{unit}] — TBD slots keyed by the CLEANING day (nextDay)
   // A TBD means: unit is free tonight, so if booked, cleaning happens tomorrow morning.
+  // Use windowDays+1 so the last visible day's "next day" TBD is captured too.
   const tbdByDay = {};
-  for (const day of days) {
+  for (const day of getDays(windowDays + 1, showPast)) {
     const eStatus = classifyDay(icals['E']||[], day);
     const nextDay = new Date(day); nextDay.setDate(day.getDate() + 1);
     const nextKey = dayKey(nextDay);
