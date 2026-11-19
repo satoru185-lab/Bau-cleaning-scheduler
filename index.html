@@ -1138,9 +1138,10 @@ async function getCheckoutSlots() {
       if (checkouts.find(c => c.unit === u)) continue;
       const todayStatus = classifyDay(icals[u]||[], day);
       const nextStatus  = classifyDay(icals[u]||[], nextDay);
-      // Unit is unbooked today (open or null) and unbooked tomorrow
+      // Unit is unbooked today (open or null) and not mid-stay or checking out tomorrow
+      // (a checkin tomorrow is OK — unit is still free tonight for a same-night booking)
       const todayFree = !todayStatus || todayStatus === 'open';
-      const nextFree  = !nextStatus  || nextStatus  === 'open';
+      const nextFree  = !nextStatus  || nextStatus  === 'open' || nextStatus === 'checkin';
       // Skip if E is active and this is A or B (they're combined/unavailable)
       if (eActive && (u === 'A' || u === 'B')) continue;
       if (todayFree && nextFree) {
