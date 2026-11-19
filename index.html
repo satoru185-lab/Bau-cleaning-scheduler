@@ -645,10 +645,10 @@ body { padding-bottom: 5rem; }
         <div id="admin-activity-content"></div>
       </div>
 
-      <!-- Cleaners tab -->
+      <!-- Preview tab -->
       <div id="admin-preview" style="display:none;">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap;">
-          <span style="font-size:0.78rem;color:var(--muted);">Viewing as:</span>
+          <span style="font-size:0.78rem;color:var(--muted);">Viewing as: <span id="preview-cleaner-label" style="font-weight:600;color:var(--ink);"></span></span>
           <select id="preview-access-select"
             style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.3rem 0.6rem;border:1px solid var(--border);border-radius:4px;background:var(--paper);cursor:pointer;">
             <option value="full">Full Access</option>
@@ -1959,6 +1959,19 @@ window.showAdminTab = function(tab) {
   if (tab === 'preview') window.renderPreviewSchedule();
 };
 
+window.viewAsCleanerFromTab = function(name, accessLevel) {
+  // Set the preview cleaner name and access level, then switch to Preview tab
+  window._previewCleanerName = name;
+  // Switch to preview tab (find the button and click it)
+  const tabs = document.querySelectorAll('#admin-tabs .tab');
+  tabs.forEach(t => { if (t.textContent.trim() === 'Preview') t.click(); });
+  // After tab switch, set dropdown to cleaner's access level
+  setTimeout(() => {
+    const sel = document.getElementById('preview-access-select');
+    if (sel) { sel.value = accessLevel; window._doRenderPreview && window._doRenderPreview(); }
+  }, 100);
+};
+
 // ── Admin — Cleaner Preview ────────────────────────────────
 const PREVIEW_ACCESS_DESC = {
   full:     'Sees all cleaner names, nights, TBD waitlist details',
@@ -1979,7 +1992,10 @@ window._doRenderPreview = function _doRenderPreview() {
   if (!container || !sel || !_previewSlots) return;
   const access = sel.value;
   if (descEl) descEl.textContent = PREVIEW_ACCESS_DESC[access] || '';
-  const fakeUser = { name: '(Preview)', role: 'cleaner', accessLevel: access, scheduleDays: 60 };
+  const previewName = window._previewCleanerName || '(Preview)';
+  const labelEl = document.getElementById('preview-cleaner-label');
+  if (labelEl) labelEl.textContent = window._previewCleanerName ? previewName : '';
+  const fakeUser = { name: previewName, role: 'cleaner', accessLevel: access, scheduleDays: 60 };
   const savedUser = currentUser;
   currentUser = fakeUser;
   renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, new Set());
@@ -2338,11 +2354,15 @@ async function loadCleanersList() {
         `<option value="${n}" ${days===n?'selected':''}>${n} days</option>`
       ).join('');
       const row = document.createElement('div');
-      row.style.cssText = 'padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.82rem;';
+      row.style.cssText = 'background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:0.85rem 1rem;margin-bottom:0.75rem;font-size:0.82rem;';
       row.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem;">
-          <span style="font-weight:600;">${data.name}</span>
-          <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <span style="font-weight:700;font-size:0.95rem;">${data.name}</span>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button onclick="viewAsCleanerFromTab('${data.name}','${data.accessLevel||'basic'}')"
+              style="font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.25rem 0.65rem;border:1px solid var(--green);border-radius:4px;background:transparent;color:var(--green);cursor:pointer;">View schedule →</button>
+            <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
           <label style="font-size:0.72rem;color:var(--muted);display:flex;align-items:center;gap:0.3rem;">
@@ -2363,19 +2383,19 @@ async function loadCleanersList() {
             </select>
           </label>
         </div>
-        <div style="margin-top:0.3rem;display:flex;align-items:center;gap:0.4rem;">
+        <div style="margin-top:0.4rem;display:flex;align-items:center;gap:0.4rem;">
           <span style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">Phone:</span>
           <input type="tel" placeholder="Phone number" value="${data.phone||''}"
             onchange="setCleanerPhone('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);flex:1;min-width:0;" />
         </div>
-        <div style="margin-top:0.25rem;display:flex;align-items:center;gap:0.4rem;">
+        <div style="margin-top:0.3rem;display:flex;align-items:center;gap:0.4rem;">
           <span style="font-size:0.72rem;color:var(--muted);white-space:nowrap;">$Cashtag:</span>
           <input type="text" placeholder="CashAppUsername" value="${data.cashtag||''}"
             onchange="setCleanerCashtag('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);flex:1;min-width:0;" />
         </div>
-        <div style="margin-top:0.25rem;font-size:0.68rem;color:var(--muted);">PIN: ${data.pin||'—'}</div>`;
+        <div style="margin-top:0.3rem;font-size:0.68rem;color:var(--muted);">PIN: ${data.pin||'—'}</div>`;
       list.appendChild(row);
     });
   });
