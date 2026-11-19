@@ -1724,7 +1724,8 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   // Summary counts
   let totalCheckouts = 0, claimedCount = 0, doneCount = 0;
   let totalTbd = 0, tbdCovered = 0;
-  let bookedNights = 0, possibleNights = 0;
+  let bookedNights = 0;
+  const possibleNights = 4 * slots.length; // 4 physical units × days in window
 
   // Confirmed checkout counts (from full schedule slots)
   for (const { day, unitRows } of slots) {
@@ -1735,10 +1736,12 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         if (claims[k]) claimedCount++;
         if (completedKeys.has(k)) doneCount++;
       }
-      // Occupancy: all 5 rentable units (A/B/C/E/F), skip unavailable A/B days when E is active
-      // (those days E is counted instead, so we don't double-count)
-      if (status !== 'unavailable') {
-        possibleNights++;
+      // Occupancy: 4 physical units = 240 possible nights (A/B/C/F × 60 days).
+      // Unit E = combined A+B, so a booked E night counts as 2.
+      // A/B marked 'unavailable' when E active — skip them (E covers those 2 nights).
+      if (unit === 'E' && status && status !== 'open') {
+        bookedNights += 2; // E booking = both A and B occupied
+      } else if (unit !== 'E' && status !== 'unavailable') {
         if (status && status !== 'open') bookedNights++;
       }
     }
