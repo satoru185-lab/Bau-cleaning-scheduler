@@ -1107,15 +1107,36 @@ async function getCheckoutSlots() {
   const windowDays = (currentUser && currentUser.scheduleDays) ? currentUser.scheduleDays : 60;
   const showPast = window._showPastSchedule ? 30 : 0;
   const days = getDays(windowDays, showPast);
-  const result = [];
-
+  // tbdByDay[dateString] = [{unit}] — TBD slots keyed by the CLEANING day (nextDay)
+  // A TBD means: unit is free tonight, so if booked, cleaning happens tomorrow morning.
+  const tbdByDay = {};
   for (const day of days) {
-    const checkouts = [];  // array of {unit, nights, tbd?}
+    const eStatus = classifyDay(icals['E']||[], day);
+    const nextDay = new Date(day); nextDay.setDate(day.getDate() + 1);
+    const nextKey = dayKey(nextDay);
+    const eNextStatus = classifyDay(icals['E']||[], nextDay);
+    const eActive = eStatus && eStatus !== 'open';
+    for (const u of ['A','B','C','F']) {
+      const todayStatus = classifyDay(icals[u]||[], day);
+      const nextStatus  = classifyDay(icals[u]||[], nextDay);
+      // Tonight must be free — unit could get a same-night booking
+      const tonightFree = !todayStatus || todayStatus === 'open';
+      // Tomorrow must not already have a guest mid-stay or checking out
+      const tomorrowOk = !nextStatus || nextStatus === 'open' || nextStatus === 'checkin' || nextStatus === 'both';
+      if (eActive && (u === 'A' || u === 'B')) continue;
+      if (tonightFree && tomorrowOk) {
+        if ((u === 'A' || u === 'B') && (eNextStatus === 'checkin' || eNextStatus === 'both')) continue;
+        if (!tbdByDay[nextKey]) tbdByDay[nextKey] = [];
+        tbdByDay[nextKey].push({ unit: u });
+      }
+    }
+  }
+
+  const result = [];
+  for (const day of days) {
+    const checkouts = [];
     const eStatus = classifyDay(icals['E']||[], day);
     const eNights = getNights(icals['E']||[], day);
-
-    // Next day — used to detect TBD (unbooked night after today)
-    const nextDay = new Date(day); nextDay.setDate(day.getDate() + 1);
 
     for (const u of ['A','B','C','F']) {
       const s = classifyDay(icals[u]||[], day);
@@ -1128,31 +1149,12 @@ async function getCheckoutSlots() {
       if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights });
     }
 
-    // TBD slots — units with no booking today AND no booking starting tomorrow
-    // (unoccupied nights that could get a last-minute booking)
-    const tbd = [];
-    const eNextStatus = classifyDay(icals['E']||[], nextDay);
-    const eActive = eStatus && eStatus !== 'open';
-    for (const u of ['A','B','C','F']) {
-      // Skip if already a confirmed checkout today
-      if (checkouts.find(c => c.unit === u)) continue;
-      const todayStatus = classifyDay(icals[u]||[], day);
-      const nextStatus  = classifyDay(icals[u]||[], nextDay);
-      // Unit is unbooked today (open or null) and not mid-stay or checking out tomorrow
-      // (a checkin tomorrow is OK — unit is still free tonight for a same-night booking)
-      const todayFree = !todayStatus || todayStatus === 'open';
-      const nextFree  = !nextStatus  || nextStatus  === 'open' || nextStatus === 'checkin';
-      // Skip if E is active and this is A or B (they're combined/unavailable)
-      if (eActive && (u === 'A' || u === 'B')) continue;
-      if (todayFree && nextFree) {
-        // Also skip if E combined would cover A/B tomorrow
-        if ((u === 'A' || u === 'B') && (eNextStatus === 'checkin' || eNextStatus === 'both')) continue;
-        tbd.push({ unit: u });
-      }
-    }
+    // TBD for this day = units whose previous night was free (potential cleaning today)
+    // Filter out any unit that already has a confirmed checkout today
+    const rawTbd = (tbdByDay[dayKey(day)] || []).filter(t => !checkouts.find(c => c.unit === t.unit));
+    const tbd = rawTbd.sort((a,b) => a.unit.localeCompare(b.unit));
 
     checkouts.sort((a,b) => a.unit.localeCompare(b.unit));
-    tbd.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, checkouts, tbd });
   }
 
