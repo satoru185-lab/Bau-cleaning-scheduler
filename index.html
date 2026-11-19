@@ -1203,9 +1203,9 @@ async function getCheckoutSlots() {
 }
 
 // Full schedule for admin — all units, all statuses
-async function getFullSchedule() {
+async function getFullSchedule(futureDays = 60, pastDays = 0) {
   const icals = await fetchAllICals();
-  const days = getDays(60);
+  const days = getDays(futureDays, pastDays);
   const result = [];
 
   for (const day of days) {
@@ -1659,7 +1659,7 @@ async function loadAdminSchedule() {
   const loading = document.getElementById('admin-loading');
 
   // Load both views in parallel
-  const [full, checkout] = await Promise.all([getFullSchedule(), getCheckoutSlots()]);
+  const [full, checkout] = await Promise.all([getFullSchedule(60, 30), getCheckoutSlots()]);
   adminFullSlots = full;
   adminSlots = checkout;
   loading.style.display = 'none';
@@ -1724,28 +1724,40 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   // Summary counts
   let totalCheckouts = 0, claimedCount = 0, doneCount = 0;
   let totalTbd = 0, tbdCovered = 0;
-  let bookedNights = 0;
-  const possibleNights = 4 * slots.length; // 4 physical units × days in window
+  let bookedNext30 = 0, bookedPast30 = 0;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const past30Start = new Date(today); past30Start.setDate(today.getDate() - 30);
+  const next30End   = new Date(today); next30End.setDate(today.getDate() + 30);
 
   // Confirmed checkout counts (from full schedule slots)
   for (const { day, unitRows } of slots) {
+    const isNext30 = day >= today && day < next30End;
+    const isPast30 = day >= past30Start && day < today;
     for (const { unit, status } of unitRows) {
       if (status === 'checkout' || status === 'both') {
-        totalCheckouts++;
-        const k = `${dayKey(day)}_${unit}`;
-        if (claims[k]) claimedCount++;
-        if (completedKeys.has(k)) doneCount++;
+        // Only count future checkouts for coverage stats
+        if (day >= today) {
+          totalCheckouts++;
+          const k = `${dayKey(day)}_${unit}`;
+          if (claims[k]) claimedCount++;
+          if (completedKeys.has(k)) doneCount++;
+        }
       }
-      // Occupancy: 4 physical units = 240 possible nights (A/B/C/F × 60 days).
-      // Unit E = combined A+B, so a booked E night counts as 2.
-      // A/B marked 'unavailable' when E active — skip them (E covers those 2 nights).
-      if (unit === 'E' && status && status !== 'open') {
-        bookedNights += 2; // E booking = both A and B occupied
-      } else if (unit !== 'E' && status !== 'unavailable') {
-        if (status && status !== 'open') bookedNights++;
+      // Occupancy: E counts as 2 (covers A+B); skip unavailable A/B when E active
+      const isBooked = status && status !== 'open' && status !== 'unavailable';
+      const nightCount = (unit === 'E') ? 2 : 1;
+      if (isBooked && unit !== 'E' && status !== 'unavailable') {
+        if (isNext30) bookedNext30++;
+        if (isPast30) bookedPast30++;
+      } else if (unit === 'E' && isBooked) {
+        if (isNext30) bookedNext30 += 2;
+        if (isPast30) bookedPast30 += 2;
       }
     }
   }
+
+  const pctNext30 = Math.round(bookedNext30 / (4 * 30) * 100);
+  const pctPast30 = Math.round(bookedPast30 / (4 * 30) * 100);
 
   // TBD counts (from checkout slots which include tbd arrays)
   for (const { day, tbd } of (checkoutSlots || [])) {
@@ -1777,7 +1789,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
       ${readyLine}
-      <span style="color:var(--muted);">📅 ${bookedNights}/${possibleNights} nights booked</span>
+      <span style="color:var(--muted);">📅 Next 30 days: <strong>${pctNext30}%</strong> booked &nbsp;·&nbsp; Past 30 days: ${pctPast30}%</span>
       <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts covered</span>
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
