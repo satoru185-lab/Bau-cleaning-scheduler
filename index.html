@@ -1713,21 +1713,17 @@ function renderAdminSchedule(slots, claims, tbdClaims, container, completedKeys 
   if (typeof tbdClaims === 'undefined') tbdClaims = {}; // backward compat
   container.innerHTML = '';
 
-  // Summary counts
+  // Summary counts — walk actual checkout slots so claimed/uncovered stay in sync
   let totalCheckouts = 0, claimedCount = 0, doneCount = 0;
   for (const { day, unitRows } of slots) {
     for (const { unit, status } of unitRows) {
       if (status === 'checkout' || status === 'both') {
         totalCheckouts++;
-        const histKey = `${dayKey(day)}_${unit}`;
-        if (completedKeys.has(histKey)) doneCount++;
+        const k = `${dayKey(day)}_${unit}`;
+        if (claims[k]) claimedCount++;
+        if (completedKeys.has(k)) doneCount++;
       }
     }
-  }
-  const todayKey = dayKey(new Date());
-  for (const k of Object.keys(claims)) {
-    // Only count future/today claims — key format is YYYY-MM-DD_UNIT
-    if (k.slice(0, 10) >= todayKey) claimedCount++;
   }
 
   const summary = document.createElement('div');
