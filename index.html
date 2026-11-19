@@ -610,8 +610,8 @@ body { padding-bottom: 5rem; }
     <!-- Admin view -->
     <div id="admin-view" style="display:none;">
       <div class="tabs" id="admin-tabs">
-        <button class="tab active" onclick="showAdminTab('activity')">Activity</button>
-        <button class="tab" onclick="showAdminTab('overview')">Schedule</button>
+        <button class="tab active" onclick="showAdminTab('overview')">Schedule</button>
+        <button class="tab" onclick="showAdminTab('activity')">Activity</button>
         <button class="tab" onclick="showAdminTab('preview')">Preview</button>
         <button class="tab" onclick="showAdminTab('history')">History</button>
         <button class="tab" onclick="showAdminTab('cleaners')">Cleaners</button>
@@ -929,11 +929,11 @@ function showApp() {
   if (currentUser.role === 'admin') {
     document.getElementById('cleaner-view').style.display = 'none';
     document.getElementById('admin-view').style.display = 'block';
-    // Default to Activity tab on login
-    document.getElementById('admin-overview').style.display = 'none';
-    document.getElementById('admin-activity').style.display = 'block';
-    loadAdminActivity();
+    // Default to Schedule tab on login
+    document.getElementById('admin-activity').style.display = 'none';
+    document.getElementById('admin-overview').style.display = 'block';
     loadAdminSchedule();
+    loadAdminActivity();
     loadCleanersList();
   } else {
     document.getElementById('cleaner-view').style.display = 'block';
