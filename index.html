@@ -1724,7 +1724,11 @@ function renderAdminSchedule(slots, claims, tbdClaims, container, completedKeys 
       }
     }
   }
-  for (const k of Object.keys(claims)) claimedCount++;
+  const todayKey = dayKey(new Date());
+  for (const k of Object.keys(claims)) {
+    // Only count future/today claims — key format is YYYY-MM-DD_UNIT
+    if (k.slice(0, 10) >= todayKey) claimedCount++;
+  }
 
   const summary = document.createElement('div');
   summary.className = 'card';
