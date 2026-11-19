@@ -1397,23 +1397,29 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       if (otherPreClaimed && (access === 'basic' || access === 'viewonly')) continue;
 
       const slotEl = document.createElement('div');
-      slotEl.className = 'slot tbd-slot';
 
       let tbdRight;
       if (iMePreClaimed) {
+        slotEl.className = 'slot tbd-slot';
         tbdRight = `<span style="font-size:0.72rem;font-weight:600;color:#2a6b4a;">${t('onWaitlist')}</span>
           <button class="claim-btn unclaim" style="margin-left:0.4rem;" onclick="cancelTbdClaim('${tbdKey}')">${t('cancel')}</button>`;
-      } else if (otherPreClaimed && access === 'full') {
-        tbdRight = `<span style="font-size:0.72rem;color:var(--muted);">Waitlisted: ${tbdClaim.cleaner}</span>`;
+        slotEl.innerHTML = `<span class="slot-unit" style="color:#b07d2a;">Unit ${unit}</span>
+          <span class="slot-label" style="color:var(--muted);">${t('tbdTitle')}</span>
+          ${tbdRight}`;
       } else if (otherPreClaimed) {
-        tbdRight = `<span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${t('taken')}</span>`;
+        // Show as a regular claimed-other slot — no TBD styling
+        slotEl.className = 'slot claimed-other';
+        const label = access === 'full' ? `Waitlisted: ${tbdClaim.cleaner}` : t('taken');
+        slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
+          <span class="slot-label"></span>
+          <span class="slot-claimer" style="color:var(--muted);font-size:0.78rem;">✓ ${label}</span>`;
       } else {
+        slotEl.className = 'slot tbd-slot';
         tbdRight = `<button class="claim-btn claim" style="font-size:0.68rem;white-space:nowrap;" onclick="claimTbd('${tbdKey}', '${dayKey(day)}', '${unit}')">${t('claimIfAvailable')}</button>`;
+        slotEl.innerHTML = `<span class="slot-unit" style="color:#b07d2a;">Unit ${unit}</span>
+          <span class="slot-label" style="color:var(--muted);">${t('tbdTitle')}</span>
+          ${tbdRight}`;
       }
-
-      slotEl.innerHTML = `<span class="slot-unit" style="color:#b07d2a;">Unit ${unit}</span>
-        <span class="slot-label" style="color:var(--muted);">${t('tbdTitle')}</span>
-        ${tbdRight}`;
       slotsDiv.appendChild(slotEl);
     }
 
