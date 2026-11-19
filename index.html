@@ -1590,7 +1590,7 @@ window.claimTbd = async function(tbdKey, date, unit) {
   });
   const tbdDateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   notifySatoru(`⏳ Unit ${unit} waitlisted`, `${currentUser.name} joined waitlist for Unit ${unit} on ${tbdDateLabel} (TBD slot)`, 'hourglass_flowing_sand');
-  logActivity('tbd_claim', `Joined waitlist for Unit ${unit}`, { unit, date });
+  logActivity('tbd_claim', `Joined waitlist for Unit ${unit} · ${tbdDateLabel}`, { unit, date });
 };
 
 window.cancelTbdClaim = async function(tbdKey) {
@@ -1601,7 +1601,7 @@ window.cancelTbdClaim = async function(tbdKey) {
     await deleteDoc(doc(db, 'tbd_claims', tbdKey));
     const tbdDateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     notifySatoru(`❌ Unit ${unit} waitlist cancelled`, `${currentUser.name} removed themselves from Unit ${unit} waitlist on ${tbdDateLabel}`, 'x');
-    logActivity('tbd_cancel', `Left waitlist for Unit ${unit}`, { unit, date });
+    logActivity('tbd_cancel', `Left waitlist for Unit ${unit} · ${tbdDateLabel}`, { unit, date });
   }
 };
 
@@ -1630,7 +1630,7 @@ window.claimSlot = async function(key, date, unit) {
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   notifySatoru(`📋 Unit ${unit} claimed`, `${currentUser.name} claimed Unit ${unit} on ${dateLabel}`);
   // Log activity
-  logActivity('claim', `Claimed Unit ${unit}`, { unit, date });
+  logActivity('claim', `Claimed Unit ${unit} · ${dateLabel}`, { unit, date });
   // Queue this slot and show/refresh the calendar prompt
   pendingCalendarSlots.push({ date, unit });
   showCalendarPrompt();
@@ -1644,7 +1644,7 @@ window.unclaim = async function(key) {
     await deleteDoc(doc(db, 'claims', key));
     const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     notifySatoru(`↩️ Unit ${unit} released`, `${currentUser.name} released Unit ${unit} on ${dateLabel} — slot is now open`, 'warning');
-    logActivity('unclaim', `Released Unit ${unit}`, { unit, date });
+    logActivity('unclaim', `Released Unit ${unit} · ${dateLabel}`, { unit, date });
   }
 };
 
