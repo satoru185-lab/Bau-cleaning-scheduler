@@ -2790,6 +2790,40 @@ window.notifyOwner = async function() {
   logActivity('complete', `Completed clean — Unit ${clState.unit} ready`, { unit: clState.unit, date: clState.date });
   const compDateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   notifySatoru(`🧹 Unit ${clState.unit} cleaned!`, `${currentUser.name} completed Unit ${clState.unit} on ${compDateLabel} — ready for check-in`, 'sparkles');
+
+  // Check if there's a same-day check-in for this unit — show staging reminder if so
+  try {
+    const icals = await fetchAllICals();
+    const cleanDay = new Date(clState.date + 'T12:00:00');
+    const unitIcal = icals[clState.unit] || [];
+    const eIcal = icals['E'] || [];
+    let hasCheckin = false;
+    const unitStatus = classifyDay(unitIcal, cleanDay);
+    if (unitStatus === 'checkin' || unitStatus === 'both') hasCheckin = true;
+    if (!hasCheckin && (clState.unit === 'A' || clState.unit === 'B')) {
+      const eStatus = classifyDay(eIcal, cleanDay);
+      if (eStatus === 'checkin' || eStatus === 'both') hasCheckin = true;
+    }
+    if (hasCheckin) {
+      // Show staging reminder modal
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1.5rem;';
+      modal.innerHTML = `
+        <div style="background:var(--paper);border-radius:12px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.25);">
+          <div style="font-size:1.5rem;margin-bottom:0.5rem;">🏠✨</div>
+          <div style="font-weight:700;font-size:1rem;margin-bottom:0.5rem;">Guests check in today!</div>
+          <div style="font-size:0.85rem;color:var(--muted);margin-bottom:1.25rem;line-height:1.5;">
+            Please stage the unit before you leave:<br><br>
+            💡 Turn on bedside lamps<br>
+            💡 Turn on a few accent lights<br>
+            🚪 Leave the unit looking welcoming
+          </div>
+          <button onclick="this.closest('div').parentElement.remove()" style="width:100%;padding:0.75rem;background:var(--green);color:#fff;border:none;border-radius:8px;font-family:'DM Mono',monospace;font-weight:600;font-size:0.9rem;cursor:pointer;">Got it ✓</button>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+  } catch(e) { /* silent — staging reminder is best-effort */ }
+
   // Send a simple "unit is ready" SMS — no payment in this message
   const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
