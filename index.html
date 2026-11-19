@@ -1659,7 +1659,7 @@ async function loadAdminSchedule() {
   const loading = document.getElementById('admin-loading');
 
   // Load both views in parallel
-  const [full, checkout] = await Promise.all([getFullSchedule(60, 30), getCheckoutSlots()]);
+  const [full, checkout] = await Promise.all([getFullSchedule(60), getCheckoutSlots()]);
   adminFullSlots = full;
   adminSlots = checkout;
   loading.style.display = 'none';
@@ -1789,7 +1789,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
       ${readyLine}
-      <span style="color:var(--muted);">📅 Next 30 days: <strong>${pctNext30}%</strong> booked &nbsp;·&nbsp; Past 30 days: ${pctPast30}%</span>
+      <span style="color:var(--muted);">📅 Next 30 days: <strong>${pctNext30}%</strong> booked</span>
       <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts covered</span>
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
