@@ -1959,13 +1959,11 @@ window.showAdminTab = function(tab) {
   if (tab === 'preview') window.renderPreviewSchedule();
 };
 
-window.viewAsCleanerFromTab = function(name, accessLevel) {
-  // Set the preview cleaner name and access level, then switch to Preview tab
+window.viewAsCleanerFromTab = function(name, accessLevel, scheduleDays) {
   window._previewCleanerName = name;
-  // Switch to preview tab (find the button and click it)
+  window._previewScheduleDays = scheduleDays || 14;
   const tabs = document.querySelectorAll('#admin-tabs .tab');
   tabs.forEach(t => { if (t.textContent.trim() === 'Preview') t.click(); });
-  // After tab switch, set dropdown to cleaner's access level
   setTimeout(() => {
     const sel = document.getElementById('preview-access-select');
     if (sel) { sel.value = accessLevel; window._doRenderPreview && window._doRenderPreview(); }
@@ -1993,9 +1991,10 @@ window._doRenderPreview = function _doRenderPreview() {
   const access = sel.value;
   if (descEl) descEl.textContent = PREVIEW_ACCESS_DESC[access] || '';
   const previewName = window._previewCleanerName || '(Preview)';
+  const previewDays = window._previewScheduleDays || 60;
   const labelEl = document.getElementById('preview-cleaner-label');
-  if (labelEl) labelEl.textContent = window._previewCleanerName ? previewName : '';
-  const fakeUser = { name: previewName, role: 'cleaner', accessLevel: access, scheduleDays: 60 };
+  if (labelEl) labelEl.textContent = window._previewCleanerName ? `${previewName} · ${previewDays}-day window` : '';
+  const fakeUser = { name: previewName, role: 'cleaner', accessLevel: access, scheduleDays: previewDays };
   const savedUser = currentUser;
   currentUser = fakeUser;
   renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, new Set());
@@ -2359,7 +2358,7 @@ async function loadCleanersList() {
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
           <span style="font-weight:700;font-size:0.95rem;">${data.name}</span>
           <div style="display:flex;gap:0.5rem;align-items:center;">
-            <button onclick="viewAsCleanerFromTab('${data.name}','${data.accessLevel||'basic'}')"
+            <button onclick="viewAsCleanerFromTab('${data.name}','${data.accessLevel||'basic'}',${data.scheduleDays||14})"
               style="font-family:'DM Mono',monospace;font-size:0.72rem;padding:0.25rem 0.65rem;border:1px solid var(--green);border-radius:4px;background:transparent;color:var(--green);cursor:pointer;">View schedule →</button>
             <button class="admin-remove" onclick="removeCleaner('${d.id}')">Remove</button>
           </div>
