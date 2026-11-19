@@ -1735,8 +1735,8 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     const isPast30 = day >= past30Start && day < today;
     for (const { unit, status } of unitRows) {
       if (status === 'checkout' || status === 'both') {
-        // Only count future checkouts for coverage stats
-        if (day >= today) {
+        // Only count next-30-day checkouts for coverage stats
+        if (isNext30) {
           totalCheckouts++;
           const k = `${dayKey(day)}_${unit}`;
           if (claims[k]) claimedCount++;
@@ -1759,8 +1759,9 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   const pctNext30 = Math.round(bookedNext30 / (4 * 30) * 100);
   const pctPast30 = Math.round(bookedPast30 / (4 * 30) * 100);
 
-  // TBD counts (from checkout slots which include tbd arrays)
+  // TBD counts — next 30 days only
   for (const { day, tbd } of (checkoutSlots || [])) {
+    if (day < today || day >= next30End) continue;
     for (const { unit } of (tbd || [])) {
       totalTbd++;
       const k = `${dayKey(day)}_${unit}`;
@@ -1789,8 +1790,8 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
       ${readyLine}
-      <span style="color:var(--muted);">📅 Next 30 days: <strong>${pctNext30}%</strong> booked</span>
-      <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts covered</span>
+      <span style="color:var(--muted);">📅 <strong>${pctNext30}%</strong> occupancy · next 30 days</span>
+      <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts assigned · next 30 days</span>
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
     </div>
