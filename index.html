@@ -1751,11 +1751,22 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     ? `<span style="color:#7a6f5e;">◑ ${tbdCovered} TBD slot${tbdCovered !== 1 ? 's' : ''} on waitlist</span>`
     : '';
 
+  // "ready" line: how many are done today; if none, check if there are any checkouts today at all
+  const todayStr = dayKey(new Date());
+  const checkoutsTodayCount = slots
+    .filter(s => dayKey(s.day) === todayStr)
+    .reduce((n, s) => n + s.unitRows.filter(r => r.status==='checkout'||r.status==='both').length, 0);
+  const readyLine = doneCount > 0
+    ? `<span style="color:var(--green);">✅ ${doneCount} unit${doneCount!==1?'s':''} ready for check-in</span>`
+    : checkoutsTodayCount > 0
+      ? `<span style="color:var(--muted);">○ 0/${checkoutsTodayCount} cleaned today</span>`
+      : `<span style="color:var(--muted);">— No cleaning today</span>`;
+
   const summary = document.createElement('div');
   summary.className = 'card';
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
-      <span style="color:var(--green);">✅ ${doneCount} units ready for check-in</span>
+      ${readyLine}
       <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts covered</span>
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
