@@ -1746,8 +1746,9 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     }
   }
 
-  const tbdLine = totalTbd > 0
-    ? `<span style="color:#7a6f5e;">◑ TBD: ${tbdCovered}/${totalTbd} on waitlist</span>`
+  // Only show TBD line when at least one slot has a waitlist claim
+  const tbdLine = tbdCovered > 0
+    ? `<span style="color:#7a6f5e;">◑ ${tbdCovered} TBD slot${tbdCovered !== 1 ? 's' : ''} on waitlist</span>`
     : '';
 
   const summary = document.createElement('div');
