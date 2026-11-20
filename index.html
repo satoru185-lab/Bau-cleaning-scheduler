@@ -2944,7 +2944,7 @@ window.notifyOwner = async function() {
       || ((clState.unit === 'A' || clState.unit === 'B') && (eStatus === 'checkin' || eStatus === 'both'));
     smsBody = hasCheckin
       ? `✅ Unit ${clState.unit} is staged — lights on, heat up, ready for check-in!`
-      : `✅ Unit ${clState.unit} is done — lights off, heat down, locked up.`;
+      : `✅ Unit ${clState.unit} is done — lights off, heat down.`;
   } catch(e) {
     smsBody = `✅ Unit ${clState.unit} is clean and ready.`;
   }
