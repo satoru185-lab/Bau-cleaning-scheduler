@@ -1902,8 +1902,9 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
 window.adminAssign = async function(key, date, unit, cleanerName) {
   if (!cleanerName) return;
   const { doc, setDoc, getDoc } = window._fb;
-  // Preserve existing checkinTime if already set
+  // Check if we're replacing someone (for the activity log)
   const existing = await getDoc(doc(db, 'claims', key));
+  const previous = existing.exists() ? existing.data().cleaner : null;
   const checkinTime = existing.exists() ? (existing.data().checkinTime || '4:00 PM') : '4:00 PM';
   await setDoc(doc(db, 'claims', key), {
     cleaner: cleanerName, date, unit,
@@ -1911,11 +1912,25 @@ window.adminAssign = async function(key, date, unit, cleanerName) {
     assignedByAdmin: true,
     checkinTime
   });
+  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  if (previous && previous !== cleanerName) {
+    logActivity('admin_reassign', `Reassigned Unit ${unit} · ${dateLabel} — ${previous} → ${cleanerName}`, { unit, date, previous, cleaner: cleanerName });
+  } else {
+    logActivity('admin_assign', `Assigned ${cleanerName} to Unit ${unit} · ${dateLabel}`, { unit, date, cleaner: cleanerName });
+  }
 };
 
 window.adminRemove = async function(key) {
-  const { doc, deleteDoc } = window._fb;
+  const { doc, deleteDoc, getDoc } = window._fb;
+  const existing = await getDoc(doc(db, 'claims', key));
+  const cleaner = existing.exists() ? existing.data().cleaner : null;
+  const date = existing.exists() ? existing.data().date : null;
+  const unit = existing.exists() ? existing.data().unit : null;
   await deleteDoc(doc(db, 'claims', key));
+  if (cleaner && date && unit) {
+    const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    logActivity('admin_remove', `Removed ${cleaner} from Unit ${unit} · ${dateLabel}`, { unit, date, cleaner });
+  }
 };
 
 // ── Check-in time management ──────────────────────────────
@@ -3193,7 +3208,7 @@ function loadAdminActivity() {
       content.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0;">No activity yet.</div>';
       return;
     }
-    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', default:'🔔' };
+    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', tbd_claim:'⏳', tbd_cancel:'❌', admin_assign:'🔧', admin_reassign:'🔄', admin_remove:'🗑️', default:'🔔' };
     snap.forEach(d => {
       const r = d.data();
       const icon = ICONS[r.type] || ICONS.default;
