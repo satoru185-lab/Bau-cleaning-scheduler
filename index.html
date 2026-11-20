@@ -2541,7 +2541,7 @@ function openUnitsTabDetail(unit) {
     const photos = Array.isArray(room.photos) ? room.photos : (room.photo ? [room.photo] : []);
     const photosHtml = photos.length
       ? `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.6rem;">
-          ${photos.map(p => `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;" onclick="openLightbox('${p}')" />`).join('')}
+          ${photos.map((p, pi) => `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;" onclick="openLightbox(${JSON.stringify(photos)},${pi})" />`).join('')}
         </div>`
       : '';
     const itemsHtml = room.items.length
@@ -2564,19 +2564,71 @@ window.closeUnitsTabDetail = function() {
   document.getElementById('units-tab-list').style.display = 'block';
 };
 
-window.openLightbox = function(src) {
-  let lb = document.getElementById('photo-lightbox');
-  if (!lb) {
-    lb = document.createElement('div');
+// ── Photo lightbox with swipe ──────────────────────────────
+(function() {
+  let _photos = [], _idx = 0, _startX = 0, _isDragging = false;
+
+  function build() {
+    const lb = document.createElement('div');
     lb.id = 'photo-lightbox';
-    lb.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
-    lb.innerHTML = '<img id="photo-lightbox-img" style="max-width:95vw;max-height:90vh;border-radius:6px;object-fit:contain;box-shadow:0 4px 32px rgba(0,0,0,0.5);" />';
-    lb.onclick = () => lb.style.display = 'none';
+    lb.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:none;flex-direction:column;align-items:center;justify-content:center;user-select:none;';
+    lb.innerHTML = `
+      <button onclick="window._lbClose()" style="position:absolute;top:16px;right:18px;background:none;border:none;color:#fff;font-size:1.8rem;cursor:pointer;line-height:1;z-index:1;">✕</button>
+      <div id="lb-counter" style="position:absolute;top:18px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,0.7);font-family:'DM Mono',monospace;font-size:0.75rem;"></div>
+      <img id="lb-img" style="max-width:92vw;max-height:82vh;border-radius:6px;object-fit:contain;box-shadow:0 4px 32px rgba(0,0,0,0.5);pointer-events:none;transition:opacity 0.15s;" />
+      <div style="display:flex;gap:1.5rem;margin-top:1rem;">
+        <button onclick="window._lbNav(-1)" id="lb-prev" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:1.4rem;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;">‹</button>
+        <button onclick="window._lbNav(1)"  id="lb-next" style="background:rgba(255,255,255,0.15);border:none;color:#fff;font-size:1.4rem;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;">›</button>
+      </div>`;
+    // Touch swipe
+    lb.addEventListener('touchstart', e => { _startX = e.touches[0].clientX; _isDragging = true; }, {passive:true});
+    lb.addEventListener('touchend', e => {
+      if (!_isDragging) return; _isDragging = false;
+      const dx = e.changedTouches[0].clientX - _startX;
+      if (Math.abs(dx) > 40) window._lbNav(dx < 0 ? 1 : -1);
+    });
+    // Mouse swipe
+    lb.addEventListener('mousedown', e => { _startX = e.clientX; _isDragging = true; });
+    lb.addEventListener('mouseup', e => {
+      if (!_isDragging) return; _isDragging = false;
+      const dx = e.clientX - _startX;
+      if (Math.abs(dx) > 40) window._lbNav(dx < 0 ? 1 : -1);
+    });
     document.body.appendChild(lb);
+    // Keyboard nav
+    document.addEventListener('keydown', e => {
+      const lb = document.getElementById('photo-lightbox');
+      if (lb.style.display === 'none') return;
+      if (e.key === 'ArrowRight') window._lbNav(1);
+      if (e.key === 'ArrowLeft')  window._lbNav(-1);
+      if (e.key === 'Escape')     window._lbClose();
+    });
   }
-  document.getElementById('photo-lightbox-img').src = src;
-  lb.style.display = 'flex';
-};
+
+  function refresh() {
+    const img = document.getElementById('lb-img');
+    img.style.opacity = '0';
+    setTimeout(() => { img.src = _photos[_idx]; img.style.opacity = '1'; }, 80);
+    document.getElementById('lb-counter').textContent = _photos.length > 1 ? `${_idx + 1} / ${_photos.length}` : '';
+    document.getElementById('lb-prev').style.visibility = _photos.length > 1 ? 'visible' : 'hidden';
+    document.getElementById('lb-next').style.visibility = _photos.length > 1 ? 'visible' : 'hidden';
+  }
+
+  window.openLightbox = function(photos, idx) {
+    if (!document.getElementById('photo-lightbox')) build();
+    _photos = Array.isArray(photos) ? photos : [photos];
+    _idx = idx || 0;
+    document.getElementById('photo-lightbox').style.display = 'flex';
+    refresh();
+  };
+  window._lbNav = function(dir) {
+    _idx = (_idx + dir + _photos.length) % _photos.length;
+    refresh();
+  };
+  window._lbClose = function() {
+    document.getElementById('photo-lightbox').style.display = 'none';
+  };
+})();
 
 // ── Home tab: next clean & my claims ──────────────────────
 function renderHomeTab(slots, claims, completedKeys = new Set()) {
