@@ -2550,7 +2550,10 @@ function openUnitsTabDetail(unit) {
     const photos = Array.isArray(room.photos) ? room.photos : (room.photo ? [room.photo] : []);
     const photosHtml = photos.length
       ? `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.6rem;">
-          ${photos.map((p, pi) => `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;" onclick="openLightbox(${JSON.stringify(photos)},${pi})" />`).join('')}
+          ${photos.map((p, pi) => {
+            const safeList = photos.map(x => `'${x.replace(/'/g,"\\'")}' `).join(',');
+            return `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;" onclick="openLightbox([${safeList}],${pi})" />`;
+          }).join('')}
         </div>`
       : '';
     const itemsHtml = room.items.length
@@ -2899,7 +2902,7 @@ function renderRoom(unit, idx) {
          <span style="color:var(--muted);font-size:0.78rem;">📷 Photo coming soon</span>
        </div>`;
   } else if (photos.length === 1) {
-    photoHtml = `<div class="room-photo"><img src="${photos[0]}" alt="${room.name}"></div>`;
+    photoHtml = `<div class="room-photo" style="cursor:zoom-in;" onclick="openLightbox(['${photos[0].replace(/'/g,"\\'")}'],0)"><img src="${photos[0]}" alt="${room.name}"></div>`;
   } else {
     const dots = photos.map((_,pi) => `<span onclick="roomCarouselGo(${idx},${pi})" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pi===0?'var(--ink)':'var(--border)'};cursor:pointer;transition:background .2s;margin:0 2px;" data-ci="${pi}"></span>`).join('');
     const imgs = photos.map((p,pi) => `<img src="${p}" alt="${room.name} ${pi+1}" style="flex:0 0 100%;width:100%;height:100%;object-fit:cover;border-radius:3px;display:block;" />`).join('');
@@ -2910,6 +2913,8 @@ function renderRoom(unit, idx) {
           <!-- Prev/next tap zones -->
           <div onclick="roomCarouselStep(${idx},-1)" style="position:absolute;left:0;top:0;width:38%;height:100%;cursor:pointer;"></div>
           <div onclick="roomCarouselStep(${idx}, 1)" style="position:absolute;right:0;top:0;width:38%;height:100%;cursor:pointer;"></div>
+          <!-- Center tap zone: enlarge -->
+          <div onclick="openLightboxCarousel(${idx})" style="position:absolute;left:38%;top:0;width:24%;height:100%;cursor:zoom-in;"></div>
           <!-- Arrow hints -->
           <div id="carousel-arrow-l-${idx}" style="position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:1.1rem;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.6);pointer-events:none;opacity:0.8;">‹</div>
           <div id="carousel-arrow-r-${idx}" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:1.1rem;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.6);pointer-events:none;opacity:0.8;">›</div>
@@ -2964,6 +2969,16 @@ window.roomCarouselGo = function(roomIdx, photoIdx) {
 window.roomCarouselStep = function(roomIdx, dir) {
   const ci = (window._carouselIdx && window._carouselIdx[roomIdx]) || 0;
   window.roomCarouselGo(roomIdx, ci + dir);
+};
+
+window.openLightboxCarousel = function(roomIdx) {
+  const rooms = (clState && clState.unit) ? (UNIT_CHECKLISTS[clState.unit] || {rooms:[]}).rooms : [];
+  const room = rooms[roomIdx];
+  if (!room) return;
+  const photos = Array.isArray(room.photos) && room.photos.length ? room.photos : (room.photo ? [room.photo] : []);
+  if (!photos.length) return;
+  const ci = (window._carouselIdx && window._carouselIdx[roomIdx]) || 0;
+  openLightbox(photos, ci);
 };
 // Touch-swipe support — attach after render
 function attachCarouselSwipe(roomIdx) {
