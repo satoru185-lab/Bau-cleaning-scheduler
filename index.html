@@ -3239,7 +3239,7 @@ function loadAdminActivity() {
         <span style="font-size:1.1rem;line-height:1.4;">${icon}</span>
         <div style="flex:1;min-width:0;">
           <div style="font-size:0.82rem;line-height:1.4;">${r.message}${unitTag}</div>
-          <div style="font-size:0.7rem;color:var(--muted);margin-top:0.15rem;">${r.actor} · ${timeStr}</div>
+          <div style="font-size:0.75rem;color:var(--text);margin-top:0.15rem;"><strong>${r.actor}</strong> <span style="color:var(--muted);">· ${timeStr}</span></div>
         </div>`;
       content.appendChild(row);
     });
