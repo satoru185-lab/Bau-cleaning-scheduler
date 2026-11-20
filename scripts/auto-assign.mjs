@@ -124,19 +124,33 @@ async function main() {
     }
   }
 
-  // Also build TBD days: unit free tonight AND checkout tomorrow (next day cleaning)
-  const tbdDays = []; // [{cleaningDay, unit}]
-  for (const day of getDays(61)) { // +1 to capture last day's TBD
-    const prev = new Date(day); prev.setDate(day.getDate() - 1);
+  // ── Expire stale TBD claims ──────────────────────────────
+  // After 10 PM ET, if tonight is still open (no booking came in), delete any
+  // TBD waitlist claim for tomorrow's cleaning — it will never become real.
+  const nowET = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const hourET = nowET.getHours();
+  if (hourET >= 22) { // 10 PM or later ET
+    const tomorrow = new Date(nowET);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+
     for (const unit of ['A', 'B', 'C', 'F', 'E']) {
-      const events = icals[unit] || [];
-      const prevStatus = classifyDay(events, prev);
-      const todayStatus = classifyDay(events, day);
-      // TBD: prev night is open/unavailable AND today would be a checkout
-      if ((prevStatus === 'open' || prevStatus === 'unavailable') &&
-          (todayStatus === 'checkout' || todayStatus === 'both')) {
-        tbdDays.push({ cleaningDay: day, unit });
-      }
+      const key = `${dayKey(tomorrow)}_${unit}`;
+      const tbdSnap = await db.collection('tbd_claims').doc(key).get();
+      if (!tbdSnap.exists) continue;
+
+      // Check if tomorrow is actually a checkout now — if so, don't expire (auto-assign will handle it)
+      const isCheckout = checkoutDays.some(c => sameDay(c.day, tomorrow) && c.unit === unit);
+      if (isCheckout) continue;
+
+      const cleanerName = tbdSnap.data().cleaner;
+      console.log(`Expiring stale TBD: ${cleanerName} on Unit ${unit} tomorrow (no booking came in)`);
+      await db.collection('tbd_claims').doc(key).delete();
+      await notifySatoru(
+        `⌛ TBD expired — Unit ${unit}`,
+        `No booking came in. ${cleanerName}'s waitlist slot for Unit ${unit} tomorrow was removed.`,
+        'hourglass'
+      );
     }
   }
 
@@ -195,6 +209,33 @@ async function main() {
   }
 
   console.log(`auto-assign: done. ${assigned} slot(s) assigned.`);
+
+  // ── Test notify (manual trigger only) ───────────────────
+  // Pass TEST_NOTIFY=CleanerName,UNIT,YYYY-MM-DD to simulate a confirmation
+  const testNotify = process.env.TEST_NOTIFY || '';
+  if (testNotify.trim()) {
+    const [cleanerName, unit, date] = testNotify.split(',').map(s => s.trim());
+    if (cleanerName && unit && date) {
+      const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/New_York'
+      });
+      const cleanerSnap = await db.collection('cleaners').doc(cleanerName.toLowerCase()).get();
+      const cleanerPhone = cleanerSnap.exists ? (cleanerSnap.data().phone || '') : '';
+      const smsText = encodeURIComponent(
+        `Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. Check the app for details.`
+      );
+      const smsLink = cleanerPhone ? `sms:${cleanerPhone}&body=${smsText}` : '';
+      const extraHeaders = smsLink ? { Actions: `view, Text ${cleanerName}, ${smsLink}` } : {};
+      console.log(`Sending test notify: ${cleanerName} → Unit ${unit} on ${dateLabel}${cleanerPhone ? ' (phone on file)' : ' (no phone)'}`);
+      await notifySatoru(
+        `✅ ${cleanerName} → Unit ${unit} confirmed`,
+        `${cleanerName} confirmed for Unit ${unit} on ${dateLabel}.${cleanerPhone ? ' Tap to send confirmation text.' : ' (No phone on file.)'}`,
+        'white_check_mark',
+        extraHeaders
+      );
+    }
+  }
+
   process.exit(0);
 }
 
