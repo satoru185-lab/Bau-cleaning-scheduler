@@ -93,10 +93,19 @@ async function fetchAllICals() {
 }
 
 // ── Notify Satoru via ntfy ─────────────────────────────────
+// Strip non-ASCII characters from header values (ntfy headers must be ASCII)
+function asciiOnly(str) {
+  return str.replace(/[^\x00-\x7F]/g, '').trim();
+}
+
 async function notifySatoru(title, body, tags = 'broom', extraHeaders = {}) {
+  const safeHeaders = {};
+  for (const [k, v] of Object.entries(extraHeaders)) {
+    safeHeaders[k] = asciiOnly(v);
+  }
   await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
     method: 'POST',
-    headers: { Title: title, Priority: 'high', Tags: tags, ...extraHeaders },
+    headers: { Title: asciiOnly(title), Priority: 'high', Tags: tags, ...safeHeaders },
     body,
   });
 }
@@ -147,7 +156,7 @@ async function main() {
       console.log(`Expiring stale TBD: ${cleanerName} on Unit ${unit} tomorrow (no booking came in)`);
       await db.collection('tbd_claims').doc(key).delete();
       await notifySatoru(
-        `⌛ TBD expired — Unit ${unit}`,
+        `TBD expired - Unit ${unit}`,
         `No booking came in. ${cleanerName}'s waitlist slot for Unit ${unit} tomorrow was removed.`,
         'hourglass'
       );
@@ -199,7 +208,7 @@ async function main() {
       : {};
 
     await notifySatoru(
-      `✅ ${cleanerName} → Unit ${unit} confirmed`,
+      `${cleanerName} - Unit ${unit} confirmed`,
       `${cleanerName} auto-assigned Unit ${unit} on ${dateLabel} from waitlist.${cleanerPhone ? ' Tap to send confirmation text.' : ' (No phone on file.)'}`,
       'white_check_mark',
       extraHeaders
@@ -228,7 +237,7 @@ async function main() {
       const extraHeaders = smsLink ? { Actions: `view, Text ${cleanerName}, ${smsLink}` } : {};
       console.log(`Sending test notify: ${cleanerName} → Unit ${unit} on ${dateLabel}${cleanerPhone ? ' (phone on file)' : ' (no phone)'}`);
       await notifySatoru(
-        `✅ ${cleanerName} → Unit ${unit} confirmed`,
+        `${cleanerName} - Unit ${unit} confirmed`,
         `${cleanerName} confirmed for Unit ${unit} on ${dateLabel}.${cleanerPhone ? ' Tap to send confirmation text.' : ' (No phone on file.)'}`,
         'white_check_mark',
         extraHeaders
