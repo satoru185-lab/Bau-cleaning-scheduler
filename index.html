@@ -2516,7 +2516,7 @@ function renderUnitsTab() {
   list.innerHTML = `<div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">Tap a unit to see its rooms and checklist.</div>`;
   for (const unit of UNITS) {
     const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms
-      .filter(r => r.name !== '🚀 First Things First' && r.name !== 'Final Check');
+      .filter(r => !r.name.includes('First Things First') && !r.name.includes('Final Check'));
     const photoCount = rooms.reduce((n, r) => n + (Array.isArray(r.photos) ? r.photos.length : (r.photo ? 1 : 0)), 0);
     const card = document.createElement('div');
     card.className = 'card';
