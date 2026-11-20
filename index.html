@@ -599,11 +599,11 @@ body { padding-bottom: 5rem; }
       <div id="tab-units" style="display:none;">
         <!-- Unit list view -->
         <div id="units-tab-list">
-          <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">Tap a unit to see its rooms and checklist.</div>
+          <div id="units-tab-intro" style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">Tap a unit to see its rooms and checklist.</div>
         </div>
         <!-- Unit detail view (back button + rooms) -->
         <div id="units-tab-detail" style="display:none;">
-          <button onclick="closeUnitsTabDetail()" style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.4rem 0.75rem;border:1px solid var(--border);border-radius:5px;background:var(--paper);cursor:pointer;touch-action:manipulation;margin-bottom:0.75rem;">← Back</button>
+          <button id="units-back-btn" onclick="closeUnitsTabDetail()" style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.4rem 0.75rem;border:1px solid var(--border);border-radius:5px;background:var(--paper);cursor:pointer;touch-action:manipulation;margin-bottom:0.75rem;">← Back</button>
           <div id="units-tab-detail-content"></div>
         </div>
       </div>
@@ -745,6 +745,14 @@ const TRANSLATIONS = {
     requestPayment: '💵 Request Payment', markDone: '✓ Mark done',
     selectCleans: 'Select cleans to bill:', totalLabel: 'Total: $',
     sendRequest: 'Send Request →', cancelPay: 'Cancel',
+    units: 'Units', history: 'History',
+    unitsIntro: 'Tap a unit to see its rooms and checklist.',
+    backBtn: '← Back',
+    noHistory: 'No past cleans yet.',
+    seeAllCleans: (n) => `See all ${n} cleans →`,
+    rooms: (n) => `${n} room${n===1?'':'s'}`,
+    photos: (n) => `${n} photo${n===1?'':'s'}`,
+    showPast: '⬆ Show past', hidePast: '⬇ Hide past',
   },
   es: {
     signIn: 'Iniciar sesión', signOut: 'Cerrar sesión', yourName: 'Tu nombre', pin: 'PIN',
@@ -769,6 +777,14 @@ const TRANSLATIONS = {
     requestPayment: '💵 Solicitar Pago', markDone: '✓ Marcar listo',
     selectCleans: 'Selecciona limpiezas a cobrar:', totalLabel: 'Total: $',
     sendRequest: 'Enviar solicitud →', cancelPay: 'Cancelar',
+    units: 'Unidades', history: 'Historial',
+    unitsIntro: 'Toca una unidad para ver sus cuartos y lista de limpieza.',
+    backBtn: '← Volver',
+    noHistory: 'Aún no hay limpiezas pasadas.',
+    seeAllCleans: (n) => `Ver las ${n} limpiezas →`,
+    rooms: (n) => `${n} cuarto${n===1?'':'s'}`,
+    photos: (n) => `${n} foto${n===1?'':'s'}`,
+    showPast: '⬆ Mostrar anteriores', hidePast: '⬇ Ocultar anteriores',
   }
 };
 function t(key, ...args) {
@@ -784,6 +800,9 @@ function setLang(lang) {
     loadCleanerSchedule();
     if (typeof loadMyHistory === 'function') loadMyHistory();
   }
+  // Re-render new tabs if visible
+  if (typeof renderUnitsTab === 'function' && document.getElementById('tab-units') && document.getElementById('tab-units').style.display !== 'none') renderUnitsTab();
+  if (typeof renderHistoryTab === 'function' && document.getElementById('tab-history') && document.getElementById('tab-history').style.display !== 'none') renderHistoryTab();
 }
 window.setLang = setLang;
 function applyLang() {
@@ -801,6 +820,8 @@ function applyLang() {
   const tabs = document.querySelectorAll('#cleaner-tabs .tab');
   if (tabs[0]) tabs[0].textContent = t('home');
   if (tabs[1]) tabs[1].textContent = t('schedule');
+  if (tabs[2]) tabs[2].textContent = t('units');
+  if (tabs[3]) tabs[3].textContent = t('history');
   // Card titles
   const cardTitles = document.querySelectorAll('#tab-home .card-title');
   if (cardTitles[0]) cardTitles[0].textContent = t('upcomingCleans');
@@ -832,6 +853,17 @@ function applyLang() {
   if (ratingTitle) ratingTitle.textContent = t('guestCleanliness');
   const ratingSub = document.getElementById('rating-sub');
   if (ratingSub) ratingSub.textContent = t('rateBeforeStart');
+  // Units tab static strings
+  const unitsIntroEl = document.getElementById('units-tab-intro');
+  if (unitsIntroEl) unitsIntroEl.textContent = t('unitsIntro');
+  const unitsBackBtn = document.getElementById('units-back-btn');
+  if (unitsBackBtn) unitsBackBtn.textContent = t('backBtn');
+  // Show past button
+  const pastToggle = document.getElementById('past-toggle-btn');
+  if (pastToggle) pastToggle.textContent = pastToggle.dataset.showing === '1' ? t('hidePast') : t('showPast');
+  // Re-render tabs if visible so dynamic strings update
+  if (document.getElementById('tab-units') && document.getElementById('tab-units').style.display !== 'none') renderUnitsTab();
+  if (document.getElementById('tab-history') && document.getElementById('tab-history').style.display !== 'none') renderHistoryTab();
 }
 
 async function initFirebase(config) {
@@ -2522,7 +2554,7 @@ window.switchTab = function(tab) {
 function renderUnitsTab() {
   const list = document.getElementById('units-tab-list');
   // Keep the intro line, rebuild unit cards after it
-  list.innerHTML = `<div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">Tap a unit to see its rooms and checklist.</div>`;
+  list.innerHTML = `<div id="units-tab-intro" style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">${t('unitsIntro')}</div>`;
   for (const unit of UNITS) {
     const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms
       .filter(r => !r.name.includes('First Things First') && !r.name.includes('Final Check'));
@@ -2533,7 +2565,7 @@ function renderUnitsTab() {
     card.innerHTML = `
       <div>
         <div style="font-family:'Fraunces',serif;font-size:1.05rem;font-weight:600;">Unit ${unit}</div>
-        <div style="font-size:0.7rem;color:var(--muted);margin-top:0.2rem;">${rooms.length} rooms${photoCount ? ' · ' + photoCount + ' photo' + (photoCount > 1 ? 's' : '') : ''}</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:0.2rem;">${t('rooms', rooms.length)}${photoCount ? ' · ' + t('photos', photoCount) : ''}</div>
       </div>
       <span style="color:var(--muted);font-size:1.2rem;">›</span>`;
     card.onclick = () => openUnitsTabDetail(unit);
@@ -3491,7 +3523,7 @@ function loadMyHistory() {
       if (rows.length > 5) {
         const more = document.createElement('div');
         more.style.cssText = 'text-align:center;padding:0.6rem 0 0.2rem;';
-        more.innerHTML = `<button onclick="switchTab('history')" style="font-family:'DM Mono',monospace;font-size:0.75rem;background:none;border:none;color:var(--muted);cursor:pointer;text-decoration:underline;">See all ${rows.length} cleans →</button>`;
+        more.innerHTML = `<button onclick="switchTab('history')" style="font-family:'DM Mono',monospace;font-size:0.75rem;background:none;border:none;color:var(--muted);cursor:pointer;text-decoration:underline;">${t('seeAllCleans', rows.length)}</button>`;
         wrap.appendChild(more);
       }
       // Cache all rows for the History tab
@@ -3541,7 +3573,7 @@ function renderHistoryTab() {
   const wrap = document.getElementById('history-tab-content');
   if (!wrap) return;
   if (_allHistoryRows.length === 0) {
-    wrap.innerHTML = `<span style="color:var(--muted);">No past cleans yet.</span>`;
+    wrap.innerHTML = `<span style="color:var(--muted);">${t('noHistory')}</span>`;
     return;
   }
   wrap.innerHTML = '';
