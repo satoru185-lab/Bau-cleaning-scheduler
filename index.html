@@ -556,6 +556,7 @@ body { padding-bottom: 5rem; }
       <div class="tabs" id="cleaner-tabs">
         <button class="tab active" onclick="switchTab('home')">Home</button>
         <button class="tab" onclick="switchTab('schedule')">Schedule</button>
+        <button class="tab" onclick="switchTab('units')">Units</button>
       </div>
       <div style="display:flex;justify-content:flex-end;margin-bottom:0.5rem;margin-top:-0.25rem;">
         <div id="lang-toggle" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;background:var(--paper);">
@@ -590,6 +591,19 @@ body { padding-bottom: 5rem; }
             <button onclick="togglePaymentMode()" style="margin-top:0.4rem;font-family:'DM Mono',monospace;font-size:0.7rem;background:none;border:none;color:var(--muted);cursor:pointer;touch-action:manipulation;width:100%;text-align:center;">Cancel</button>
           </div>
           <div id="my-history-list" style="font-size:0.82rem;color:var(--muted);">Loading...</div>
+        </div>
+      </div>
+
+      <!-- Units tab -->
+      <div id="tab-units" style="display:none;">
+        <!-- Unit list view -->
+        <div id="units-tab-list">
+          <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">Tap a unit to see its rooms and checklist.</div>
+        </div>
+        <!-- Unit detail view (back button + rooms) -->
+        <div id="units-tab-detail" style="display:none;">
+          <button onclick="closeUnitsTabDetail()" style="font-family:'DM Mono',monospace;font-size:0.78rem;padding:0.4rem 0.75rem;border:1px solid var(--border);border-radius:5px;background:var(--paper);cursor:pointer;touch-action:manipulation;margin-bottom:0.75rem;">← Back</button>
+          <div id="units-tab-detail-content"></div>
         </div>
       </div>
 
@@ -2485,11 +2499,69 @@ window.removeCleaner = async function(id) {
 window.switchTab = function(tab) {
   document.getElementById('tab-home').style.display = tab === 'home' ? 'block' : 'none';
   document.getElementById('tab-schedule').style.display = tab === 'schedule' ? 'block' : 'none';
+  document.getElementById('tab-units').style.display = tab === 'units' ? 'block' : 'none';
   document.querySelectorAll('#cleaner-tabs .tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('#cleaner-tabs .tab').forEach(t => {
     if ((tab === 'home' && t.textContent === 'Home') ||
-        (tab === 'schedule' && t.textContent === 'Schedule')) t.classList.add('active');
+        (tab === 'schedule' && t.textContent === 'Schedule') ||
+        (tab === 'units' && t.textContent === 'Units')) t.classList.add('active');
   });
+  if (tab === 'units') renderUnitsTab();
+};
+
+// ── Units tab (read-only preview for cleaners) ────────────
+function renderUnitsTab() {
+  const list = document.getElementById('units-tab-list');
+  // Keep the intro line, rebuild unit cards after it
+  list.innerHTML = `<div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">Tap a unit to see its rooms and checklist.</div>`;
+  for (const unit of UNITS) {
+    const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms
+      .filter(r => r.name !== '🚀 First Things First' && r.name !== 'Final Check');
+    const photoCount = rooms.reduce((n, r) => n + (Array.isArray(r.photos) ? r.photos.length : (r.photo ? 1 : 0)), 0);
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.cssText = 'cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;margin-bottom:0.5rem;';
+    card.innerHTML = `
+      <div>
+        <div style="font-family:'Fraunces',serif;font-size:1.05rem;font-weight:600;">Unit ${unit}</div>
+        <div style="font-size:0.7rem;color:var(--muted);margin-top:0.2rem;">${rooms.length} rooms${photoCount ? ' · ' + photoCount + ' photo' + (photoCount > 1 ? 's' : '') : ''}</div>
+      </div>
+      <span style="color:var(--muted);font-size:1.2rem;">›</span>`;
+    card.onclick = () => openUnitsTabDetail(unit);
+    list.appendChild(card);
+  }
+}
+
+function openUnitsTabDetail(unit) {
+  document.getElementById('units-tab-list').style.display = 'none';
+  document.getElementById('units-tab-detail').style.display = 'block';
+  const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms;
+  let html = `<div style="font-family:'Fraunces',serif;font-size:1.2rem;font-weight:600;margin-bottom:1rem;">Unit ${unit}</div>`;
+  for (const room of rooms) {
+    const photos = Array.isArray(room.photos) ? room.photos : (room.photo ? [room.photo] : []);
+    const photosHtml = photos.length
+      ? `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+          ${photos.map(p => `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;" />`).join('')}
+        </div>`
+      : '';
+    const itemsHtml = room.items.length
+      ? `<ul style="margin:0;padding-left:1.1rem;list-style:disc;">
+          ${room.items.map(item => `<li style="font-size:0.8rem;color:var(--text);padding:0.2rem 0;">${item}</li>`).join('')}
+        </ul>`
+      : '';
+    html += `
+      <div class="card" style="margin-bottom:0.6rem;padding:0.9rem 1rem;">
+        <div style="font-weight:600;font-size:0.9rem;margin-bottom:0.5rem;">${room.name}</div>
+        ${photosHtml}
+        ${itemsHtml}
+      </div>`;
+  }
+  document.getElementById('units-tab-detail-content').innerHTML = html;
+}
+
+window.closeUnitsTabDetail = function() {
+  document.getElementById('units-tab-detail').style.display = 'none';
+  document.getElementById('units-tab-list').style.display = 'block';
 };
 
 // ── Home tab: next clean & my claims ──────────────────────
