@@ -2545,17 +2545,27 @@ function openUnitsTabDetail(unit) {
   document.getElementById('units-tab-list').style.display = 'none';
   document.getElementById('units-tab-detail').style.display = 'block';
   const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms;
+  // Build flat list of ALL photos across all rooms for unit-wide swiping
+  const allUnitPhotos = [];
+  for (const room of rooms) {
+    const rp = Array.isArray(room.photos) ? room.photos : (room.photo ? [room.photo] : []);
+    for (const p of rp) allUnitPhotos.push(p);
+  }
+  const safeAllPhotos = allUnitPhotos.map(x => `'${x.replace(/'/g,"\\'")}'`).join(',');
+
   let html = `<div style="font-family:'Fraunces',serif;font-size:1.2rem;font-weight:600;margin-bottom:1rem;">Unit ${unit}</div>`;
+  let globalPhotoIdx = 0;
   for (const room of rooms) {
     const photos = Array.isArray(room.photos) ? room.photos : (room.photo ? [room.photo] : []);
     const photosHtml = photos.length
       ? `<div style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.6rem;">
           ${photos.map((p, pi) => {
-            const safeList = photos.map(x => `'${x.replace(/'/g,"\\'")}' `).join(',');
-            return `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;" onclick="openLightbox([${safeList}],${pi})" />`;
+            const gIdx = globalPhotoIdx + pi;
+            return `<img src="${p}" style="width:calc(33% - 0.3rem);height:90px;object-fit:cover;border-radius:4px;display:block;cursor:zoom-in;" onclick="openLightbox([${safeAllPhotos}],${gIdx})" />`;
           }).join('')}
         </div>`
       : '';
+    globalPhotoIdx += photos.length;
     const itemsHtml = room.items.length
       ? `<ul style="margin:0;padding-left:1.1rem;list-style:disc;">
           ${room.items.map(item => `<li style="font-size:0.8rem;color:var(--text);padding:0.2rem 0;">${item}</li>`).join('')}
@@ -2902,7 +2912,7 @@ function renderRoom(unit, idx) {
          <span style="color:var(--muted);font-size:0.78rem;">📷 Photo coming soon</span>
        </div>`;
   } else if (photos.length === 1) {
-    photoHtml = `<div class="room-photo" style="cursor:zoom-in;" onclick="openLightbox(['${photos[0].replace(/'/g,"\\'")}'],0)"><img src="${photos[0]}" alt="${room.name}"></div>`;
+    photoHtml = `<div class="room-photo" style="cursor:zoom-in;" onclick="openLightboxCarousel(${idx})"><img src="${photos[0]}" alt="${room.name}"></div>`;
   } else {
     const dots = photos.map((_,pi) => `<span onclick="roomCarouselGo(${idx},${pi})" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${pi===0?'var(--ink)':'var(--border)'};cursor:pointer;transition:background .2s;margin:0 2px;" data-ci="${pi}"></span>`).join('');
     const imgs = photos.map((p,pi) => `<img src="${p}" alt="${room.name} ${pi+1}" style="flex:0 0 100%;width:100%;height:100%;object-fit:cover;border-radius:3px;display:block;" />`).join('');
@@ -2973,12 +2983,19 @@ window.roomCarouselStep = function(roomIdx, dir) {
 
 window.openLightboxCarousel = function(roomIdx) {
   const rooms = (clState && clState.unit) ? (UNIT_CHECKLISTS[clState.unit] || {rooms:[]}).rooms : [];
-  const room = rooms[roomIdx];
-  if (!room) return;
-  const photos = Array.isArray(room.photos) && room.photos.length ? room.photos : (room.photo ? [room.photo] : []);
-  if (!photos.length) return;
+  if (!rooms.length) return;
+  // Build flat list of all photos across all rooms
+  const allPhotos = [];
+  const roomOffsets = [];
+  for (const room of rooms) {
+    roomOffsets.push(allPhotos.length);
+    const rp = Array.isArray(room.photos) && room.photos.length ? room.photos : (room.photo ? [room.photo] : []);
+    for (const p of rp) allPhotos.push(p);
+  }
+  if (!allPhotos.length) return;
   const ci = (window._carouselIdx && window._carouselIdx[roomIdx]) || 0;
-  openLightbox(photos, ci);
+  const globalIdx = (roomOffsets[roomIdx] || 0) + ci;
+  openLightbox(allPhotos, globalIdx);
 };
 // Touch-swipe support — attach after render
 function attachCarouselSwipe(roomIdx) {
