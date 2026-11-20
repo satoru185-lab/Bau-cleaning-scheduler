@@ -27,12 +27,3 @@ jobs:
         working-directory: scripts
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-
-      - name: Send test ntfy ping (remove after confirming notifications work)
-        run: |
-          curl -s -o /dev/null -w "ntfy response: %{http_code}\n" \
-            -X POST https://ntfy.sh/bau-cleaning-satoru-7x9k \
-            -H "Title: ✅ Auto-assign ran OK" \
-            -H "Priority: default" \
-            -H "Tags: white_check_mark" \
-            -d "Hourly check ran at $(date -u). No new assignments this run."
