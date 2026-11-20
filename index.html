@@ -1877,8 +1877,9 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       }
 
       // TBD waitlist badge — shown on open/unavailable slots that someone has waitlisted
+      // Never show on today (booking didn't come through, slot is effectively expired)
       let tbdHtml = '';
-      if (tbdClaim && !claim && !isDone) {
+      if (tbdClaim && !claim && !isDone && !isToday) {
         tbdHtml = `<div style="margin-top:0.35rem;padding:0.2rem 0.4rem;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;font-size:0.68rem;color:#7a5c00;">
           ⏳ Waitlisted: <strong>${tbdClaim.cleaner}</strong>
         </div>`;
