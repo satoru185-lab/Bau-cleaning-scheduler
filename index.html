@@ -2932,10 +2932,27 @@ window.notifyOwner = async function() {
   // Log activity and notify Satoru
   logActivity('complete', `Completed clean — Unit ${clState.unit} ready`, { unit: clState.unit, date: clState.date });
   const compDateLabel = new Date(clState.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  notifySatoru(`🧹 Unit ${clState.unit} cleaned!`, `${currentUser.name} completed Unit ${clState.unit} on ${compDateLabel} — ready for check-in`, 'sparkles');
 
-  // Send a simple "unit is ready" SMS — no payment in this message
-  const msg = encodeURIComponent(`✅ Unit ${clState.unit} is clean and ready for check-in! (${clState.date})`);
+  // Determine check-in status to tailor the SMS message
+  let smsBody;
+  try {
+    const icals = await fetchAllICals();
+    const cleanDay = new Date(clState.date + 'T12:00:00');
+    const unitStatus = classifyDay(icals[clState.unit] || [], cleanDay);
+    const eStatus = classifyDay(icals['E'] || [], cleanDay);
+    const hasCheckin = unitStatus === 'checkin' || unitStatus === 'both'
+      || ((clState.unit === 'A' || clState.unit === 'B') && (eStatus === 'checkin' || eStatus === 'both'));
+    smsBody = hasCheckin
+      ? `✅ Unit ${clState.unit} is clean and ready for check-in!`
+      : `✅ Unit ${clState.unit} is done — all lights off, thermostat down, locked up.`;
+  } catch(e) {
+    smsBody = `✅ Unit ${clState.unit} is clean and ready.`;
+  }
+
+  notifySatoru(`🧹 Unit ${clState.unit} cleaned!`, `${currentUser.name} completed Unit ${clState.unit} on ${compDateLabel}`, 'sparkles');
+
+  // Send context-aware SMS to owner
+  const msg = encodeURIComponent(smsBody);
   window.location.href = `sms:${OWNER_PHONE}&body=${msg}`;
 
   // Show payment request option on the complete screen
