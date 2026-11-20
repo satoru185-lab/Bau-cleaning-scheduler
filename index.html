@@ -491,7 +491,7 @@ body { padding-bottom: 5rem; }
   <div class="complete-screen" id="rating-screen" style="display:none;">
     <div class="complete-icon">🏠</div>
     <div class="complete-title" id="rating-title">How did guests leave it?</div>
-    <div id="rating-sub" style="font-size:0.8rem;color:var(--muted);margin-bottom:1.5rem;">Rate guest cleanliness before you start</div>
+    <div id="rating-sub" style="font-size:0.8rem;color:var(--muted);margin-bottom:1.5rem;" data-i18n="rateBeforeStart">Rate guest cleanliness before you start</div>
     <div id="star-row" style="display:flex;justify-content:center;gap:0.6rem;margin-bottom:1rem;">
       <button class="star-btn" onclick="selectRating(1)" data-star="1">★</button>
       <button class="star-btn" onclick="selectRating(2)" data-star="2">★</button>
@@ -500,7 +500,7 @@ body { padding-bottom: 5rem; }
       <button class="star-btn" onclick="selectRating(5)" data-star="5">★</button>
     </div>
     <div id="rating-note" style="font-size:0.78rem;color:var(--accent);min-height:1.4rem;margin-bottom:1.25rem;text-align:center;"></div>
-    <button class="btn btn-green" id="start-checklist-btn" style="width:100%;font-size:0.9rem;padding:0.75rem;opacity:0.4;pointer-events:none;" onclick="startChecklistAfterRating()">Text Satoru &amp; Start Cleaning →</button>
+    <button class="btn btn-green" id="start-checklist-btn" style="width:100%;font-size:0.9rem;padding:0.75rem;opacity:0.4;pointer-events:none;" onclick="startChecklistAfterRating()" data-i18n="startCleaning">Text Satoru &amp; Start Cleaning →</button>
   </div>
 
   <!-- Completion screen shown inside checklist -->
@@ -513,14 +513,14 @@ body { padding-bottom: 5rem; }
       ✅ Notify Satoru — Unit Ready
     </button>
     <div id="complete-pay-section" style="display:none;margin-top:1rem;border:1px solid var(--green);border-radius:8px;padding:0.9rem;background:#f8fdf9;text-align:left;">
-      <div style="font-size:0.8rem;color:#2a6b4a;font-weight:600;margin-bottom:0.5rem;">💵 Request payment for this clean?</div>
+      <div id="req-pay-label" style="font-size:0.8rem;color:#2a6b4a;font-weight:600;margin-bottom:0.5rem;">💵 Request payment for this clean?</div>
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
-        <span style="font-size:0.78rem;color:#555;">Amount: $</span>
+        <span id="amount-label" style="font-size:0.78rem;color:#555;">Amount: $</span>
         <input type="number" id="complete-pay-amount" inputmode="decimal" min="0" step="0.01" placeholder="0.00"
           style="font-family:'DM Mono',monospace;font-size:0.9rem;border:1px solid #ccc;border-radius:4px;padding:0.35rem 0.5rem;width:90px;text-align:center;" />
       </div>
-      <button onclick="sendPaymentFromComplete()" style="font-family:'DM Mono',monospace;font-size:0.82rem;padding:0.55rem 1rem;border:none;border-radius:5px;background:#2a6b4a;color:white;cursor:pointer;touch-action:manipulation;width:100%;">Send Payment Request →</button>
-      <button onclick="document.getElementById('complete-pay-section').style.display='none'" style="margin-top:0.4rem;font-family:'DM Mono',monospace;font-size:0.7rem;background:none;border:none;color:var(--muted);cursor:pointer;touch-action:manipulation;width:100%;text-align:center;">Skip for now</button>
+      <button id="send-pay-req-btn" onclick="sendPaymentFromComplete()" style="font-family:'DM Mono',monospace;font-size:0.82rem;padding:0.55rem 1rem;border:none;border-radius:5px;background:#2a6b4a;color:white;cursor:pointer;touch-action:manipulation;width:100%;">Send Payment Request →</button>
+      <button id="skip-pay-btn" onclick="document.getElementById('complete-pay-section').style.display='none'" style="margin-top:0.4rem;font-family:'DM Mono',monospace;font-size:0.7rem;background:none;border:none;color:var(--muted);cursor:pointer;touch-action:manipulation;width:100%;text-align:center;">Skip for now</button>
     </div>
     <button class="btn btn-ghost" id="back-to-schedule-btn" style="width:100%;margin-top:0.75rem;font-size:0.8rem;touch-action:manipulation;" onclick="closeChecklist()">Back to schedule</button>
   </div>
@@ -753,6 +753,20 @@ const TRANSLATIONS = {
     rooms: (n) => `${n} room${n===1?'':'s'}`,
     photos: (n) => `${n} photo${n===1?'':'s'}`,
     showPast: '⬆ Show past', hidePast: '⬇ Hide past',
+    photoComingSoon: '📷 Photo coming soon',
+    startCleaning: 'Text Satoru & Start Cleaning →',
+    ratingTitle: 'How did guests leave it?',
+    requestPayClean: '💵 Request payment for this clean?',
+    amountLabel: 'Amount: $',
+    sendPayRequest: 'Send Payment Request →',
+    skipForNow: 'Skip for now',
+    checkinBannerTitle: '🏠 Guests check in today!',
+    checkinBannerBody: '💡 Turn on bedside lamps<br>💡 Leave a few accent lights on<br>🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp<br>🚪 Leave the unit looking welcoming',
+    nocheckBannerTitle: '🌙 No check-in today',
+    nocheckBannerBody: '💡 Turn off all lights<br>🌡️ Turn the thermostat <strong>down</strong><br>🔒 Make sure the unit is locked up',
+    ratingNoteLow: '📸 Take a photo and send it to Satoru',
+    ratingNoteMid: 'Could be better — note any issues',
+    ratingNoteHigh: 'Great! Guests left it tidy 👍',
   },
   es: {
     signIn: 'Iniciar sesión', signOut: 'Cerrar sesión', yourName: 'Tu nombre', pin: 'PIN',
@@ -785,6 +799,20 @@ const TRANSLATIONS = {
     rooms: (n) => `${n} cuarto${n===1?'':'s'}`,
     photos: (n) => `${n} foto${n===1?'':'s'}`,
     showPast: '⬆ Mostrar anteriores', hidePast: '⬇ Ocultar anteriores',
+    photoComingSoon: '📷 Foto próximamente',
+    startCleaning: 'Avisar a Satoru e iniciar limpieza →',
+    ratingTitle: '¿Cómo dejaron el lugar los huéspedes?',
+    requestPayClean: '💵 ¿Solicitar pago por esta limpieza?',
+    amountLabel: 'Monto: $',
+    sendPayRequest: 'Enviar solicitud de pago →',
+    skipForNow: 'Omitir por ahora',
+    checkinBannerTitle: '🏠 ¡Los huéspedes llegan hoy!',
+    checkinBannerBody: '💡 Enciende las lámparas de noche<br>💡 Deja algunas luces de ambiente encendidas<br>🌡️ Sube el termostato a una temperatura cómoda<br>🚪 Deja la unidad con aspecto acogedor',
+    nocheckBannerTitle: '🌙 Sin check-in hoy',
+    nocheckBannerBody: '💡 Apaga todas las luces<br>🌡️ Baja el termostato<br>🔒 Asegúrate de que la unidad esté cerrada',
+    ratingNoteLow: '📸 Toma una foto y mándasela a Satoru',
+    ratingNoteMid: 'Podría estar mejor — anota cualquier problema',
+    ratingNoteHigh: '¡Excelente! Los huéspedes lo dejaron ordenado 👍',
   }
 };
 function t(key, ...args) {
@@ -853,6 +881,21 @@ function applyLang() {
   if (ratingTitle) ratingTitle.textContent = t('guestCleanliness');
   const ratingSub = document.getElementById('rating-sub');
   if (ratingSub) ratingSub.textContent = t('rateBeforeStart');
+  // Checklist / rating / complete screen
+  const ratingTitleEl = document.getElementById('rating-title');
+  if (ratingTitleEl) ratingTitleEl.textContent = t('ratingTitle');
+  const ratingSubEl = document.getElementById('rating-sub');
+  if (ratingSubEl) ratingSubEl.textContent = t('rateBeforeStart');
+  const startClBtn = document.getElementById('start-checklist-btn');
+  if (startClBtn) startClBtn.textContent = t('startCleaning');
+  const reqPayLabel = document.getElementById('req-pay-label');
+  if (reqPayLabel) reqPayLabel.textContent = t('requestPayClean');
+  const amountLabelEl = document.getElementById('amount-label');
+  if (amountLabelEl) amountLabelEl.textContent = t('amountLabel');
+  const sendPayBtn = document.getElementById('send-pay-req-btn');
+  if (sendPayBtn) sendPayBtn.textContent = t('sendPayRequest');
+  const skipPayBtn = document.getElementById('skip-pay-btn');
+  if (skipPayBtn) skipPayBtn.textContent = t('skipForNow');
   // Units tab static strings
   const unitsIntroEl = document.getElementById('units-tab-intro');
   if (unitsIntroEl) unitsIntroEl.textContent = t('unitsIntro');
@@ -2556,8 +2599,8 @@ function renderUnitsTab() {
   // Keep the intro line, rebuild unit cards after it
   list.innerHTML = `<div id="units-tab-intro" style="font-size:0.75rem;color:var(--muted);margin-bottom:0.75rem;">${t('unitsIntro')}</div>`;
   for (const unit of UNITS) {
-    const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms
-      .filter(r => !r.name.includes('First Things First') && !r.name.includes('Final Check'));
+    const rooms = getChecklist(unit).rooms
+      .filter(r => !r.name.includes('First Things First') && !r.name.includes('Primero lo primero') && !r.name.includes('Final Check') && !r.name.includes('Revisión final'));
     const photoCount = rooms.reduce((n, r) => n + (Array.isArray(r.photos) ? r.photos.length : (r.photo ? 1 : 0)), 0);
     const card = document.createElement('div');
     card.className = 'card';
@@ -2576,7 +2619,7 @@ function renderUnitsTab() {
 function openUnitsTabDetail(unit) {
   document.getElementById('units-tab-list').style.display = 'none';
   document.getElementById('units-tab-detail').style.display = 'block';
-  const rooms = (UNIT_CHECKLISTS[unit] || {rooms:[]}).rooms;
+  const rooms = getChecklist(unit).rooms;
   // Build flat list of ALL photos across all rooms for unit-wide swiping
   const allUnitPhotos = [];
   for (const room of rooms) {
@@ -2799,6 +2842,78 @@ const UNIT_CHECKLISTS = {
   }
 };
 
+// Spanish translations for checklist task items and room names
+const UNIT_CHECKLISTS_ES = {
+  A: {
+    rooms: [
+      { name: '🚀 Primero lo primero', items: ['Quitar toda la ropa de cama', 'Revisar sábanas por manchas y tratar antes de lavar', 'Poner la lavadora', 'Revisar daños o artículos olvidados por los huéspedes', 'Abrir ventanas para ventilar'] },
+      { name: 'Cocina', items: ['Vaciar el lavavajillas / relavar los platos', 'Limpiar encimeras y estufa', 'Limpiar el fregadero', 'Vaciar la basura y poner bolsa nueva', 'Reponer jabón de platos, esponja'] },
+      { name: 'Baño', items: ['Tallar el inodoro', 'Limpiar lavabo y espejo', 'Limpiar regadera/tina', 'Cambiar toallas', 'Vaciar la basura', 'Reponer artículos de baño'] },
+      { name: 'Recámara', items: ['Tender cama con sábanas limpias', 'Quitar el polvo de superficies', 'Aspirar el piso', 'Revisar debajo de la cama', 'Cerrar todos los clósets'] },
+      { name: 'Sala', items: ['Aspirar sofá y cojines', 'Limpiar la mesita de centro', 'Revisar artículos olvidados', 'Acomodar la decoración'] },
+      { name: 'Revisión final', items: ['Cerrar ventanas', 'Apagar todas las luces', 'Ajustar termostato', 'Sacar las bolsas de basura', 'Cerrar con llave y devolver la llave'] },
+    ]
+  },
+  B: {
+    rooms: [
+      { name: '🚀 Primero lo primero', items: ['Quitar toda la ropa de cama', 'Revisar sábanas por manchas y tratar antes de lavar', 'Poner la lavadora', 'Revisar daños o artículos olvidados por los huéspedes', 'Abrir ventanas para ventilar'] },
+      { name: 'Cocina', items: ['Vaciar el lavavajillas / relavar los platos', 'Limpiar encimeras y estufa', 'Limpiar el fregadero', 'Vaciar la basura y poner bolsa nueva', 'Reponer jabón de platos, esponja'] },
+      { name: 'Baño', items: ['Tallar el inodoro', 'Limpiar lavabo y espejo', 'Limpiar regadera', 'Cambiar toallas', 'Vaciar la basura', 'Reponer artículos de baño'] },
+      { name: 'Recámara', items: ['Tender cama con sábanas limpias', 'Quitar el polvo de superficies', 'Aspirar el piso', 'Revisar debajo de la cama'] },
+      { name: 'Sala', items: ['Aspirar sofá', 'Limpiar la mesa', 'Revisar artículos olvidados'] },
+      { name: 'Revisión final', items: ['Cerrar ventanas', 'Apagar las luces', 'Ajustar termostato', 'Sacar la basura', 'Cerrar con llave'] },
+    ]
+  },
+  C: {
+    rooms: [
+      { name: '🚀 Primero lo primero', items: ['Quitar toda la ropa de cama', 'Revisar sábanas por manchas y tratar antes de lavar', 'Poner la lavadora', 'Revisar daños o artículos olvidados por los huéspedes', 'Abrir ventanas para ventilar'] },
+      { name: 'Cocina', items: ['Vaciar el lavavajillas / relavar los platos', 'Limpiar encimeras y estufa', 'Limpiar el fregadero', 'Vaciar la basura y poner bolsa nueva', 'Reponer jabón de platos, esponja', 'Limpiar el exterior del refrigerador'] },
+      { name: 'Baño', items: ['Tallar el inodoro', 'Limpiar lavabo y espejo', 'Limpiar regadera', 'Cambiar toallas', 'Vaciar la basura', 'Reponer artículos de baño'] },
+      { name: 'Recámara', items: ['Tender cama (queen) con sábanas limpias', 'Quitar el polvo de superficies', 'Aspirar el piso', 'Revisar debajo de la cama', 'Cerrar los clósets'] },
+      { name: 'Sala', items: ['Aspirar sofá y cojines', 'Limpiar mesita de centro y mueble de TV', 'Revisar artículos olvidados', 'Acomodar la decoración'] },
+      { name: 'Revisión final', items: ['Cerrar ventanas', 'Apagar todas las luces', 'Ajustar termostato', 'Sacar las bolsas de basura', 'Cerrar con llave y devolver la llave'] },
+    ]
+  },
+  E: {
+    rooms: [
+      { name: '🚀 Primero lo primero', items: ['Quitar toda la ropa de cama', 'Revisar sábanas por manchas y tratar antes de lavar', 'Poner la lavadora', 'Revisar daños o artículos olvidados por los huéspedes', 'Abrir ventanas para ventilar'] },
+      { name: 'Cocina', items: ['Vaciar el lavavajillas / relavar los platos', 'Limpiar encimeras y estufa', 'Limpiar el fregadero', 'Vaciar la basura y poner bolsa nueva', 'Reponer suministros', 'Limpiar el interior del microondas'] },
+      { name: 'Baño 1', items: ['Tallar el inodoro', 'Limpiar lavabo y espejo', 'Limpiar regadera/tina', 'Cambiar toallas', 'Vaciar la basura', 'Reponer artículos de baño'] },
+      { name: 'Baño 2', items: ['Tallar el inodoro', 'Limpiar lavabo y espejo', 'Limpiar regadera', 'Cambiar toallas', 'Vaciar la basura', 'Reponer artículos de baño'] },
+      { name: 'Recámara 1', items: ['Tender cama (king) con sábanas limpias', 'Quitar el polvo de superficies', 'Aspirar el piso', 'Revisar debajo de la cama', 'Cerrar los clósets'] },
+      { name: 'Recámara 2', items: ['Tender cama con sábanas limpias', 'Quitar el polvo de superficies', 'Aspirar el piso'] },
+      { name: 'Sala', items: ['Aspirar todos los muebles', 'Limpiar la mesita de centro', 'Revisar artículos olvidados', 'Acomodar la decoración', 'Revisar el balcón'] },
+      { name: 'Revisión final', items: ['Cerrar ventanas y puerta del balcón', 'Apagar todas las luces y ventiladores', 'Ajustar termostato', 'Sacar toda la basura', 'Cerrar con llave y devolver la llave'] },
+    ]
+  },
+  F: {
+    rooms: [
+      { name: '🚀 Primero lo primero', items: ['Quitar toda la ropa de cama', 'Revisar sábanas por manchas y tratar antes de lavar', 'Poner la lavadora', 'Revisar daños o artículos olvidados por los huéspedes', 'Abrir ventanas para ventilar'] },
+      { name: 'Cocina', items: ['Vaciar el lavavajillas / relavar los platos', 'Limpiar encimeras y estufa', 'Limpiar el fregadero', 'Vaciar la basura y poner bolsa nueva', 'Reponer jabón de platos, esponja'] },
+      { name: 'Baño', items: ['Tallar el inodoro', 'Limpiar lavabo y espejo', 'Limpiar regadera', 'Cambiar toallas', 'Vaciar la basura', 'Reponer artículos de baño'] },
+      { name: 'Recámara', items: ['Tender cama con sábanas limpias', 'Quitar el polvo de superficies', 'Aspirar el piso', 'Revisar debajo de la cama'] },
+      { name: 'Sala', items: ['Aspirar sofá', 'Limpiar la mesa', 'Revisar artículos olvidados', 'Acomodar la decoración'] },
+      { name: 'Revisión final', items: ['Cerrar ventanas', 'Apagar las luces', 'Ajustar termostato', 'Sacar la basura', 'Cerrar con llave'] },
+    ]
+  }
+};
+
+// Return the right checklist for the current language (merges photos/structure from EN, text from ES)
+function getChecklist(unit) {
+  const base = UNIT_CHECKLISTS[unit] || { rooms: [] };
+  if (appLang !== 'es') return base;
+  const esData = UNIT_CHECKLISTS_ES[unit];
+  if (!esData) return base;
+  return {
+    ...base,
+    rooms: base.rooms.map((room, i) => {
+      const esRoom = esData.rooms[i];
+      if (!esRoom) return room;
+      return { ...room, name: esRoom.name, items: esRoom.items };
+    })
+  };
+}
+
 // owner phone number for SMS
 const OWNER_PHONE = '8456168631';
 const OWNER_CASHTAG = 'SatoruBauman';
@@ -2868,13 +2983,13 @@ window.selectRating = function(stars) {
   });
   const noteEl = document.getElementById('rating-note');
   if (stars <= 3) {
-    noteEl.textContent = '📸 Take a photo and send it to Satoru';
+    noteEl.textContent = t('ratingNoteLow');
     noteEl.style.color = 'var(--accent)';
   } else if (stars === 4) {
-    noteEl.textContent = 'Could be better — note any issues';
+    noteEl.textContent = t('ratingNoteMid');
     noteEl.style.color = 'var(--muted)';
   } else {
-    noteEl.textContent = 'Great! Guests left it tidy 👍';
+    noteEl.textContent = t('ratingNoteHigh');
     noteEl.style.color = 'var(--green)';
   }
   document.getElementById('start-checklist-btn').style.opacity = '1';
@@ -2913,7 +3028,7 @@ window.closeChecklist = function() {
 };
 
 function buildRoomTabs(unit) {
-  const rooms = (UNIT_CHECKLISTS[unit] || UNIT_CHECKLISTS.A).rooms;
+  const rooms = getChecklist(unit).rooms;
   const wrap = document.getElementById('cl-room-tabs');
   wrap.innerHTML = '';
   rooms.forEach((r, i) => {
@@ -2931,7 +3046,7 @@ function renderRoom(unit, idx) {
   // Update tab active state
   document.querySelectorAll('.room-tab').forEach((t,i) => t.classList.toggle('active', i===idx));
 
-  const rooms = (UNIT_CHECKLISTS[unit] || UNIT_CHECKLISTS.A).rooms;
+  const rooms = getChecklist(unit).rooms;
   const room = rooms[idx];
   const body = document.getElementById('cl-body');
 
@@ -2941,7 +3056,7 @@ function renderRoom(unit, idx) {
   let photoHtml;
   if (photos.length === 0) {
     photoHtml = `<div class="room-photo" style="display:flex;align-items:center;justify-content:center;min-height:180px;">
-         <span style="color:var(--muted);font-size:0.78rem;">📷 Photo coming soon</span>
+         <span style="color:var(--muted);font-size:0.78rem;">${t('photoComingSoon')}</span>
        </div>`;
   } else if (photos.length === 1) {
     photoHtml = `<div class="room-photo" style="cursor:zoom-in;" onclick="openLightboxCarousel(${idx})"><img src="${photos[0]}" alt="${room.name}"></div>`;
@@ -3050,7 +3165,7 @@ window.toggleCheck = function(roomIdx, itemIdx) {
 };
 
 function updateProgress(unit) {
-  const rooms = (UNIT_CHECKLISTS[unit] || UNIT_CHECKLISTS.A).rooms;
+  const rooms = getChecklist(unit).rooms;
   let total = 0, done = 0;
   rooms.forEach((r, ri) => {
     r.items.forEach((_, ji) => {
@@ -3092,22 +3207,13 @@ function updateProgress(unit) {
           if (hasCheckin) {
             bannerEl.style.background = '#eef4ee';
             bannerEl.style.borderColor = '#5a8a6a';
-            bannerEl.innerHTML = `<div style="font-weight:700;margin-bottom:0.4rem;">🏠 Guests check in today!</div>
-              <div style="line-height:1.6;">
-                💡 Turn on bedside lamps<br>
-                💡 Leave a few accent lights on<br>
-                🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp<br>
-                🚪 Leave the unit looking welcoming
-              </div>`;
+            bannerEl.innerHTML = `<div style="font-weight:700;margin-bottom:0.4rem;">${t('checkinBannerTitle')}</div>
+              <div style="line-height:1.6;">${t('checkinBannerBody')}</div>`;
           } else {
             bannerEl.style.background = '#f5f5f5';
             bannerEl.style.borderColor = '#ccc';
-            bannerEl.innerHTML = `<div style="font-weight:700;margin-bottom:0.4rem;">🌙 No check-in today</div>
-              <div style="line-height:1.6;">
-                💡 Turn off all lights<br>
-                🌡️ Turn the thermostat <strong>down</strong><br>
-                🔒 Make sure the unit is locked up
-              </div>`;
+            bannerEl.innerHTML = `<div style="font-weight:700;margin-bottom:0.4rem;">${t('nocheckBannerTitle')}</div>
+              <div style="line-height:1.6;">${t('nocheckBannerBody')}</div>`;
           }
           bannerEl.style.display = 'block';
         } catch(e) { /* silent */ }
