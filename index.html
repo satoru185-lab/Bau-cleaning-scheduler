@@ -1217,7 +1217,8 @@ async function getCheckoutSlots() {
       const nextStatus  = classifyDay(icals[u]||[], nextDay);
       // Tonight must be free — unit could get a same-night booking
       // 'unavailable' = last free night before tomorrow's checkin, still physically free tonight
-      const tonightFree = !todayStatus || todayStatus === 'open' || todayStatus === 'unavailable';
+      // 'checkout' / 'both' = guests left today, unit is free tonight after cleaning
+      const tonightFree = !todayStatus || todayStatus === 'open' || todayStatus === 'unavailable' || todayStatus === 'checkout' || todayStatus === 'both';
       // Tomorrow must not already have a guest mid-stay or checking out
       const tomorrowOk = !nextStatus || nextStatus === 'open' || nextStatus === 'checkin' || nextStatus === 'both';
       if (eActive && (u === 'A' || u === 'B')) continue;
