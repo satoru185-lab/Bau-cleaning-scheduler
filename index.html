@@ -1845,9 +1845,11 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   const next30End   = new Date(today); next30End.setDate(today.getDate() + 30);
 
   // Confirmed checkout counts (from full schedule slots)
+  let checkinOnlyTodayCount = 0;
   for (const { day, unitRows } of slots) {
     const isNext30 = day >= today && day < next30End;
     const isPast30 = day >= past30Start && day < today;
+    const isDayToday = sameDay(day, new Date());
     for (const { unit, status } of unitRows) {
       if (status === 'checkout' || status === 'both') {
         // Only count next-30-day checkouts for coverage stats
@@ -1857,6 +1859,12 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
           if (claims[k]) claimedCount++;
           if (completedKeys.has(k)) doneCount++;
         }
+      }
+      // Checkin-only (no checkout) — needs staging, not cleaning
+      if ((status === 'checkin') && isDayToday) {
+        checkinOnlyTodayCount++;
+        const k = `${dayKey(day)}_${unit}`;
+        if (stagedKeys.has(k)) doneCount++;
       }
       // Occupancy: E counts as 2 (covers A+B); skip unavailable A/B when E active
       const isBooked = status && status !== 'open' && status !== 'unavailable';
@@ -1889,16 +1897,17 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     ? `<span style="color:#7a6f5e;">◑ ${tbdCovered} TBD slot${tbdCovered !== 1 ? 's' : ''} on waitlist</span>`
     : '';
 
-  // "ready" line: how many are done today; if none, check if there are any checkouts today at all
+  // "ready" line: cleaned + staged units both count as ready for check-in
   const todayStr = dayKey(new Date());
   const checkoutsTodayCount = slots
     .filter(s => dayKey(s.day) === todayStr)
     .reduce((n, s) => n + s.unitRows.filter(r => r.status==='checkout'||r.status==='both').length, 0);
+  const totalTodayNeeded = checkoutsTodayCount + checkinOnlyTodayCount;
   const readyLine = doneCount > 0
     ? `<span style="color:var(--green);">✅ ${doneCount} unit${doneCount!==1?'s':''} ready for check-in</span>`
-    : checkoutsTodayCount > 0
-      ? `<span style="color:var(--muted);">○ 0/${checkoutsTodayCount} cleaned today</span>`
-      : `<span style="color:var(--muted);">— No cleaning today</span>`;
+    : totalTodayNeeded > 0
+      ? `<span style="color:var(--muted);">○ 0/${totalTodayNeeded} ready today</span>`
+      : `<span style="color:var(--muted);">— No units need attention today</span>`;
 
   const summary = document.createElement('div');
   summary.className = 'card';
