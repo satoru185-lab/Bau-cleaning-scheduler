@@ -1777,9 +1777,10 @@ async function loadAdminSchedule() {
   let latestAdminClaims = {};
   let latestAdminTbdClaims = {};
   let adminCompletedKeys = new Set();
+  let adminStagedKeys = new Set();
 
   function reRenderAdmin() {
-    renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys);
+    renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys, adminStagedKeys);
   }
 
   onSnapshot(collection(db, 'cleaners'), snap => {
@@ -1805,6 +1806,12 @@ async function loadAdminSchedule() {
     snap.forEach(d => { latestAdminTbdClaims[d.id] = d.data(); });
     reRenderAdmin();
   });
+
+  onSnapshot(collection(db, 'staged'), snap => {
+    adminStagedKeys = new Set();
+    snap.forEach(d => { adminStagedKeys.add(d.id); });
+    reRenderAdmin();
+  });
 }
 
 // Status config
@@ -1817,7 +1824,7 @@ const STATUS_CONFIG = {
   unavailable: { label: 'N/A (Unit E)',   bg: '#f0ece4', border: '#c8b89a', color: '#a08060' },
 };
 
-function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container, completedKeys = new Set()) {
+function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container, completedKeys = new Set(), stagedKeys = new Set()) {
   // backward compat: if checkoutSlots is actually claims object (old call signature), shift args
   if (checkoutSlots && !Array.isArray(checkoutSlots)) {
     completedKeys = container || new Set();
@@ -1937,9 +1944,10 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       const isDone = completedKeys.has(histKey);
       const nightLabel = nights ? `${nights}n` : '';
 
+      const isStaged = stagedKeys.has(histKey);
       const cell = document.createElement('div');
-      const cellBg = isDone ? '#d4edda' : cfg.bg;
-      const cellBorder = isDone ? '#2a6b4a' : cfg.border;
+      const cellBg = isDone ? '#d4edda' : isStaged ? '#eef4ee' : cfg.bg;
+      const cellBorder = isDone ? '#2a6b4a' : isStaged ? '#5a8a6a' : cfg.border;
       cell.style.cssText = `background:${cellBg};border:2px solid ${cellBorder};border-radius:4px;padding:0.5rem 0.6rem;font-size:0.75rem;${isDone ? 'position:relative;' : ''}`;
 
       // Check-in time dropdown (shown on checkin and both tiles)
@@ -1993,13 +2001,31 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         </div>`;
       }
 
+      // Staging button — shown on checkin-only tiles (no checkout, so no cleaning)
+      let stagingHtml = '';
+      if (isCheckin && !isCheckout && !isDone) {
+        if (isStaged) {
+          stagingHtml = `<div style="margin-top:0.35rem;">
+            <span style="color:#2a5040;font-size:0.72rem;font-weight:600;">🏠 Staged &amp; Ready</span>
+          </div>`;
+        } else {
+          stagingHtml = `<div style="margin-top:0.35rem;">
+            <div style="font-size:0.65rem;color:#5a7a6a;margin-bottom:0.2rem;">💡 Heat · lights · welcoming</div>
+            <button onclick="markStaged('${histKey}','${dayKey(day)}','${unit}')"
+              style="width:100%;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.4rem;border:1px solid #5a8a6a;border-radius:3px;background:#eef4ee;color:#2a5040;cursor:pointer;font-weight:600;">
+              Mark Staged ✓
+            </button>
+          </div>`;
+        }
+      }
+
       cell.innerHTML = `
         <div style="display:flex;align-items:baseline;justify-content:space-between;">
           <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
-        <div style="color:${isDone ? '#1a4a30' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
-        ${checkinHtml}${assignHtml}${tbdHtml}`;
+        <div style="color:${isDone ? '#1a4a30' : isStaged ? '#2a5040' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
+        ${checkinHtml}${assignHtml}${tbdHtml}${stagingHtml}`;
       grid.appendChild(cell);
     }
 
@@ -2040,6 +2066,18 @@ window.adminRemove = async function(key) {
     const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     logActivity('admin_remove', `Removed ${cleaner} from Unit ${unit} · ${dateLabel}`, { unit, date, cleaner });
   }
+};
+
+// ── Staging ───────────────────────────────────────────────
+window.markStaged = async function(histKey, date, unit) {
+  const { doc, setDoc } = window._fb;
+  await setDoc(doc(db, 'staged', histKey), {
+    date, unit,
+    stagedBy: (currentUser && currentUser.name) || 'admin',
+    stagedAt: new Date().toISOString()
+  });
+  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  logActivity('staged', `Unit ${unit} staged for check-in · ${dateLabel}`, { unit, date });
 };
 
 // ── Check-in time management ──────────────────────────────
@@ -3555,7 +3593,7 @@ function loadAdminActivity() {
       content.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0;">No activity yet.</div>';
       return;
     }
-    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', tbd_claim:'⏳', tbd_cancel:'❌', admin_assign:'🔧', admin_reassign:'🔄', admin_remove:'🗑️', auto_assign:'🤖', start:'🧹', rating:'⭐', default:'🔔' };
+    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', tbd_claim:'⏳', tbd_cancel:'❌', admin_assign:'🔧', admin_reassign:'🔄', admin_remove:'🗑️', auto_assign:'🤖', start:'🧹', rating:'⭐', staged:'🏠', default:'🔔' };
     snap.forEach(d => {
       const r = d.data();
       const icon = ICONS[r.type] || ICONS.default;
