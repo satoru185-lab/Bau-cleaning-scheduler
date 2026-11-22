@@ -1509,7 +1509,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
 
       let linenNote = '';
       if (guests) {
-        if ((unit === 'A' || unit === 'F') && guests > 3) {
+        if ((unit === 'A' || unit === 'F') && guests >= 3) {
           linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (air mattress) · ${guests} guests</div>`;
         } else if (unit === 'C' && guests >= 3) {
           linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (sofa bed) · ${guests} guests</div>`;
@@ -2081,7 +2081,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       const guestLabel = (isCheckin && guests) ? `<span style="font-size:0.65rem;color:${cfg.color};opacity:0.85;">👥 ${guests}</span>` : '';
       let sofaBedWarning = '';
       if (isCheckin && guests) {
-        if ((unit === 'A' || unit === 'F') && guests > 3) {
+        if ((unit === 'A' || unit === 'F') && guests >= 3) {
           sofaBedWarning = `<div style="font-size:0.63rem;color:#8a5020;margin-top:0.15rem;">🛏 Leave out extra linens (air mattress)</div>`;
         } else if (unit === 'C' && guests >= 3) {
           sofaBedWarning = `<div style="font-size:0.63rem;color:#8a5020;margin-top:0.15rem;">🛏 Leave out extra linens (sofa bed)</div>`;
