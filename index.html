@@ -1507,17 +1507,19 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
         rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">${t('claim')}</button>`;
       }
 
+      const guestCountLine = guests ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;">👥 ${guests} guest${guests!==1?'s':''} checking in</div>` : '';
       let linenNote = '';
       if (guests) {
         if ((unit === 'A' || unit === 'F') && guests >= 3) {
-          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (air mattress) · ${guests} guests</div>`;
+          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (air mattress)</div>`;
         } else if (unit === 'C' && guests >= 3) {
-          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (sofa bed) · ${guests} guests</div>`;
+          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (sofa bed)</div>`;
         }
       }
       slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
         <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · ${t('doneBy')} ${doneBy}` : ''}</span>
         ${rightSide}
+        ${guestCountLine}
         ${linenNote}`;
       slotsDiv.appendChild(slotEl);
     }
