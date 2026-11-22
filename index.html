@@ -1783,6 +1783,9 @@ async function loadAdminSchedule() {
     renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys, adminStagedKeys);
   }
 
+  // "Show past" toggle fires a custom event on the container
+  container.addEventListener('rerender', reRenderAdmin);
+
   onSnapshot(collection(db, 'cleaners'), snap => {
     adminCleanerNames = [];
     snap.forEach(d => adminCleanerNames.push(d.data().name));
@@ -1919,6 +1922,10 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       ? `<span style="color:var(--muted);">○ 0/${totalTodayNeeded} ready today</span>`
       : `<span style="color:var(--muted);">— No units need attention today</span>`;
 
+  // Track whether past days are shown (default: hidden)
+  if (typeof window._adminShowPast === 'undefined') window._adminShowPast = false;
+  const showPast = window._adminShowPast;
+
   const summary = document.createElement('div');
   summary.className = 'card';
   summary.innerHTML = `<div class="card-title">Summary</div>
@@ -1929,17 +1936,25 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
     </div>
-    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;">
+    <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;align-items:center;">
       ${Object.entries(STATUS_CONFIG).map(([k,v]) =>
         `<span style="font-size:0.68rem;padding:0.2rem 0.6rem;border-radius:3px;background:${v.bg};border:1px solid ${v.border};color:${v.color};">${v.label}</span>`
       ).join('')}
+      <button onclick="(function(){window._adminShowPast=!window._adminShowPast;document.getElementById('admin-schedule').dispatchEvent(new Event('rerender'));})();"
+        style="margin-left:auto;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.2rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);color:var(--muted);cursor:pointer;">
+        ${showPast ? '⬆ Hide past' : '⬇ Show past'}
+      </button>
     </div>`;
   container.appendChild(summary);
 
   for (const { day, unitRows } of slots) {
+    const isPastDay = day < today;
+    if (isPastDay && !showPast) continue; // hide past days unless toggled
+
     const block = document.createElement('div');
     block.className = 'day-block';
     block.style.marginBottom = '0.5rem';
+    if (isPastDay) block.style.opacity = '0.6';
 
     const isToday = sameDay(day, new Date());
     const header = document.createElement('div');
@@ -2053,11 +2068,6 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     container.appendChild(block);
   }
 
-  // Scroll today into view (past days visible above by scrolling up)
-  requestAnimationFrame(() => {
-    const anchor = document.getElementById('admin-today-anchor');
-    if (anchor) anchor.scrollIntoView({ behavior: 'instant', block: 'start' });
-  });
 }
 
 window.adminAssign = async function(key, date, unit, cleanerName) {
