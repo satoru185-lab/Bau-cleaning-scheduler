@@ -936,19 +936,7 @@ async function bootApp() {
     }
   } catch(e) {}
 
-  if (restoredUser) {
-    // Show app right away with cached user — Firebase loads in background
-    currentUser = restoredUser;
-    showApp(); // will await _firebaseReady internally for Firestore calls
-  } else {
-    // Show login form immediately
-    document.getElementById('login-card').style.display = 'block';
-    applyLang();
-    const bottomNav = document.querySelector('.bottom-nav');
-    if (bottomNav) bottomNav.style.display = 'none';
-  }
-
-  // Start loading Firebase + data in background
+  // Start loading Firebase + data in background — MUST be assigned before showApp() is called
   _firebaseReady = (async () => {
     try {
       await initFirebase(FIREBASE_CONFIG);
@@ -975,6 +963,18 @@ async function bootApp() {
       throw e;
     }
   })();
+
+  if (restoredUser) {
+    // Show app right away with cached user — _firebaseReady is now set so afterReady() works
+    currentUser = restoredUser;
+    showApp();
+  } else {
+    // Show login form immediately
+    document.getElementById('login-card').style.display = 'block';
+    applyLang();
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) bottomNav.style.display = 'none';
+  }
 }
 
 // ── Login ─────────────────────────────────────────────────
