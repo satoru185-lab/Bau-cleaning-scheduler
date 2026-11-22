@@ -2078,7 +2078,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         }
       }
 
-      const guestLabel = (isCheckin && guests) ? `<span style="font-size:0.65rem;color:${cfg.color};opacity:0.85;">👥 ${guests}</span>` : '';
+      const guestLabel = (isCheckin && guests) ? `<div style="font-size:0.72rem;font-weight:600;color:${cfg.color};margin-top:0.15rem;">👥 ${guests} guest${guests!==1?'s':''}</div>` : '';
       let sofaBedWarning = '';
       if (isCheckin && guests) {
         if ((unit === 'A' || unit === 'F') && guests >= 3) {
@@ -2092,7 +2092,8 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
           <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
-        <div style="color:${isDone ? '#1a4a30' : isStaged ? '#2a5040' : cfg.color};font-size:0.68rem;margin-top:0.1rem;display:flex;align-items:center;gap:0.4rem;">${cfg.label} ${guestLabel}</div>
+        <div style="color:${isDone ? '#1a4a30' : isStaged ? '#2a5040' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
+        ${guestLabel}
         ${sofaBedWarning}
         ${checkinHtml}${assignHtml}${tbdHtml}${stagingHtml}`;
       grid.appendChild(cell);
@@ -2853,13 +2854,13 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
 
   const mySlots = [];
   for (const { day, checkouts } of slots) {
-    for (const { unit, nights } of checkouts) {
+    for (const { unit, nights, guests } of checkouts) {
       const key = slotKey(day, unit);
       if (claims[key] && claims[key].cleaner === currentUser.name) {
         // Skip if already completed (key format matches history doc id: YYYY-MM-DD_UNIT)
         const histKey = `${dayKey(day)}_${unit}`;
         if (completedKeys.has(histKey)) continue;
-        mySlots.push({ day, unit, nights, key });
+        mySlots.push({ day, unit, nights, guests, key });
       }
     }
   }
@@ -2870,7 +2871,7 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
   if (mySlots.length === 0) {
     area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">${t('noUpcoming')}</div></div>`;
   } else {
-    const { day, unit, nights } = mySlots[0];
+    const { day, unit, nights, guests } = mySlots[0];
     const isToday = sameDay(day, new Date());
     const dateLabel = isToday ? t('today') : formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
@@ -2881,7 +2882,7 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
         <div class="next-clean-label">${t('nextClean')}</div>
         <div class="next-clean-date">${dateLabel}</div>
         <div class="next-clean-unit">Unit ${unit}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
-        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">
+        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}')">
           ${t('openChecklist')}
         </button>
       </div>`;
@@ -2894,14 +2895,14 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     return;
   }
   list.innerHTML = '';
-  for (const { day, unit, nights } of mySlots) {
+  for (const { day, unit, nights, guests } of mySlots) {
     const isToday = sameDay(day, new Date());
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);';
     const dateLabel = isToday ? `<span style="color:var(--accent);font-weight:500;">${t('today')}</span>` : formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
     row.innerHTML = `<span>${dateLabel} — Unit ${unit}${nightLabel}</span>
-      <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}')">${t('checklist')}</button>`;
+      <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}')">${t('checklist')}</button>`;
     list.appendChild(row);
   }
 }
@@ -3019,19 +3020,40 @@ const UNIT_CHECKLISTS_ES = {
 };
 
 // Return the right checklist for the current language (merges photos/structure from EN, text from ES)
-function getChecklist(unit) {
+function getChecklist(unit, guests) {
   const base = UNIT_CHECKLISTS[unit] || { rooms: [] };
-  if (appLang !== 'es') return base;
-  const esData = UNIT_CHECKLISTS_ES[unit];
-  if (!esData) return base;
-  return {
-    ...base,
-    rooms: base.rooms.map((room, i) => {
-      const esRoom = esData.rooms[i];
-      if (!esRoom) return room;
-      return { ...room, name: esRoom.name, items: esRoom.items };
-    })
-  };
+  const numGuests = guests || (typeof clState !== 'undefined' ? clState.guests : 0) || 0;
+
+  // Determine if extra bed setup is needed
+  const needsExtraBed = numGuests >= 3 && (unit === 'A' || unit === 'F' || unit === 'C');
+  const extraBedTask = unit === 'C'
+    ? (appLang === 'es' ? '🛏 Dejar ropa de cama extra para sofá-cama' : '🛏 Leave out extra linens for sofa bed')
+    : (appLang === 'es' ? '🛏 Dejar ropa de cama extra para colchón inflable' : '🛏 Leave out extra linens for air mattress');
+
+  let rooms = base.rooms;
+
+  // Apply Spanish translations
+  if (appLang === 'es') {
+    const esData = UNIT_CHECKLISTS_ES[unit];
+    if (esData) {
+      rooms = base.rooms.map((room, i) => {
+        const esRoom = esData.rooms[i];
+        if (!esRoom) return room;
+        return { ...room, name: esRoom.name, items: esRoom.items };
+      });
+    }
+  }
+
+  // Inject extra bed task into "First Things First" room
+  if (needsExtraBed) {
+    rooms = rooms.map((room, i) => {
+      const isFirst = i === 0; // Always the first room
+      if (!isFirst) return room;
+      return { ...room, items: [...room.items, extraBedTask] };
+    });
+  }
+
+  return { ...base, rooms };
 }
 
 // owner phone number for SMS
@@ -3074,8 +3096,8 @@ function loadSavedClState() {
 // Completed cleans available for payment requests (populated by loadMyHistory)
 let _completedCleans = [];
 
-window.openChecklist = function(unit, date, nights) {
-  clState = { unit, date, nights: parseInt(nights)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString() };
+window.openChecklist = function(unit, date, nights, guests) {
+  clState = { unit, date, nights: parseInt(nights)||0, guests: parseInt(guests)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString() };
   saveClState();
   document.getElementById('cl-title').textContent = `Unit ${unit}`;
   document.getElementById('cl-date').textContent = date + (clState.nights ? ` · ${clState.nights} night${clState.nights===1?'':'s'}` : '');
