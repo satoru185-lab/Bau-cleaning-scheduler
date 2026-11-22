@@ -1767,7 +1767,7 @@ async function loadAdminSchedule() {
   const loading = document.getElementById('admin-loading');
 
   // Load both views in parallel
-  const [full, checkout] = await Promise.all([getFullSchedule(60), getCheckoutSlots()]);
+  const [full, checkout] = await Promise.all([getFullSchedule(60, 30), getCheckoutSlots()]);
   adminFullSlots = full;
   adminSlots = checkout;
   loading.style.display = 'none';
