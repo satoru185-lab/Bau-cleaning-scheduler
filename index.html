@@ -1247,15 +1247,16 @@ async function getCheckoutSlots() {
     const eStatus = classifyDay(icals['E']||[], day);
     const eNights = getNights(icals['E']||[], day);
 
+    const eGuests = getGuests(icals['E']||[], day);
     for (const u of ['A','B','C','F']) {
       const s = classifyDay(icals[u]||[], day);
       if (s==='checkout'||s==='both') {
-        checkouts.push({ unit: u, nights: getNights(icals[u]||[], day) });
+        checkouts.push({ unit: u, nights: getNights(icals[u]||[], day), guests: getGuests(icals[u]||[], day) });
       }
     }
     if (eStatus==='checkout'||eStatus==='both') {
-      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights });
-      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights });
+      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: eGuests });
+      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: eGuests });
     }
 
     // TBD for this day = units whose previous night was free (potential cleaning today)
@@ -1475,7 +1476,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
     slotsDiv.className = 'slots';
 
     // Confirmed checkout slots
-    for (const {unit, nights} of visibleSlots) {
+    for (const {unit, nights, guests} of visibleSlots) {
       const key = slotKey(day, unit);
       const histKey = `${dayKey(day)}_${unit}`;
       const ciKey = `${dayKey(day)}_${unit}_ci`;
@@ -1506,9 +1507,18 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
         rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">${t('claim')}</button>`;
       }
 
+      let linenNote = '';
+      if (guests) {
+        if ((unit === 'A' || unit === 'F') && guests > 3) {
+          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (air mattress) · ${guests} guests</div>`;
+        } else if (unit === 'C' && guests >= 3) {
+          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (sofa bed) · ${guests} guests</div>`;
+        }
+      }
       slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
         <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · ${t('doneBy')} ${doneBy}` : ''}</span>
-        ${rightSide}`;
+        ${rightSide}
+        ${linenNote}`;
       slotsDiv.appendChild(slotEl);
     }
 
@@ -2069,7 +2079,14 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       }
 
       const guestLabel = (isCheckin && guests) ? `<span style="font-size:0.65rem;color:${cfg.color};opacity:0.85;">👥 ${guests}</span>` : '';
-      const sofaBedWarning = (isCheckin && guests && guests > 4) ? `<div style="font-size:0.63rem;color:#8a5020;margin-top:0.15rem;">🛏 Set up sofa bed</div>` : '';
+      let sofaBedWarning = '';
+      if (isCheckin && guests) {
+        if ((unit === 'A' || unit === 'F') && guests > 3) {
+          sofaBedWarning = `<div style="font-size:0.63rem;color:#8a5020;margin-top:0.15rem;">🛏 Leave out extra linens (air mattress)</div>`;
+        } else if (unit === 'C' && guests >= 3) {
+          sofaBedWarning = `<div style="font-size:0.63rem;color:#8a5020;margin-top:0.15rem;">🛏 Leave out extra linens (sofa bed)</div>`;
+        }
+      }
       cell.innerHTML = `
         <div style="display:flex;align-items:baseline;justify-content:space-between;">
           <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
