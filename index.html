@@ -1109,7 +1109,10 @@ function parseICal(text) {
     if (/not available/i.test(summary)) continue;
     const start = parseDate(startM[1]);
     const end   = parseDate(endM[1]);
-    events.push({ start, end });
+    // Parse guest count from Airbnb summary e.g. "Airbnb (3 guests)" or "Reserved - 3 guests"
+    const guestM = summary.match(/(\d+)\s+guest/i);
+    const guests = guestM ? parseInt(guestM[1]) : null;
+    events.push({ start, end, guests });
   }
   return events;
 }
@@ -1164,6 +1167,14 @@ function getNights(events, day) {
       const nights = Math.round((ev.end - ev.start) / (1000 * 60 * 60 * 24));
       return nights;
     }
+  }
+  return null;
+}
+
+function getGuests(events, day) {
+  // Find the booking that checks IN on this day, return guest count
+  for (const ev of events) {
+    if (sameDay(ev.start, day)) return ev.guests || null;
   }
   return null;
 }
@@ -1322,25 +1333,28 @@ async function getFullSchedule(futureDays = 60, pastDays = 0) {
     const eNights = getNights(icals['E']||[], day);
 
     const eActive = eStatus && eStatus !== 'open'; // E has a real booking
+    const eGuests = getGuests(icals['E']||[], day);
     for (const u of ['A','B','C','F']) {
       let status = classifyDay(icals[u]||[], day);
       let nights = getNights(icals[u]||[], day);
+      let guests = getGuests(icals[u]||[], day);
       // E combined: if E checks out, A and B become checkouts
       if ((eStatus==='checkout'||eStatus==='both') && (u==='A'||u==='B')) {
         if (!status || status==='checkin') {
           status = eStatus;
           nights = eNights;
+          guests = eGuests;
         }
       }
       // If E is active, A and B are unavailable unless they have their own booking
       if (eActive && (u==='A'||u==='B') && (!status || status==='open')) {
         status = 'unavailable';
       }
-      unitRows.push({ unit: u, status: status || 'open', nights });
+      unitRows.push({ unit: u, status: status || 'open', nights, guests });
     }
     // Only show E if it has an actual booking
     if (eActive) {
-      unitRows.push({ unit: 'E', status: eStatus, nights: eNights, combined: true });
+      unitRows.push({ unit: 'E', status: eStatus, nights: eNights, guests: eGuests, combined: true });
     }
     unitRows.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, unitRows });
@@ -1967,7 +1981,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.4rem;padding:0.6rem;';
 
-    for (const { unit, status, nights, combined } of unitRows) {
+    for (const { unit, status, nights, guests, combined } of unitRows) {
       const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.open;
       const isCheckout = status === 'checkout' || status === 'both';
       const isCheckin  = status === 'checkin'  || status === 'both';
@@ -2054,12 +2068,15 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         }
       }
 
+      const guestLabel = (isCheckin && guests) ? `<span style="font-size:0.65rem;color:${cfg.color};opacity:0.85;">👥 ${guests}</span>` : '';
+      const sofaBedWarning = (isCheckin && guests && guests > 4) ? `<div style="font-size:0.63rem;color:#8a5020;margin-top:0.15rem;">🛏 Set up sofa bed</div>` : '';
       cell.innerHTML = `
         <div style="display:flex;align-items:baseline;justify-content:space-between;">
           <span style="font-weight:600;">Unit ${unit}${combined ? ' <span style="font-size:0.6rem;opacity:0.6;">(E)</span>' : ''}</span>
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
-        <div style="color:${isDone ? '#1a4a30' : isStaged ? '#2a5040' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
+        <div style="color:${isDone ? '#1a4a30' : isStaged ? '#2a5040' : cfg.color};font-size:0.68rem;margin-top:0.1rem;display:flex;align-items:center;gap:0.4rem;">${cfg.label} ${guestLabel}</div>
+        ${sofaBedWarning}
         ${checkinHtml}${assignHtml}${tbdHtml}${stagingHtml}`;
       grid.appendChild(cell);
     }
