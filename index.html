@@ -1098,6 +1098,7 @@ async function fetchICal(unit) {
 
 function parseICal(text) {
   const events = [];
+  text = text.replace(/\r?\n[ \t]/g, ''); // unfold wrapped iCal lines
   const blocks = text.split('BEGIN:VEVENT');
   for (let i = 1; i < blocks.length; i++) {
     const b = blocks[i];
@@ -1112,7 +1113,9 @@ function parseICal(text) {
     // Parse guest count from Airbnb summary e.g. "Airbnb (3 guests)" or "Reserved - 3 guests"
     const guestM = summary.match(/(\d+)\s+guest/i);
     const guests = guestM ? parseInt(guestM[1]) : null;
-    events.push({ start, end, guests });
+    // Airbnb confirmation code from the reservation link (matched to Gmail sync data)
+    const codeM = b.match(/reservations\/details\/([A-Z0-9]{8,12})/) || b.match(/\b(HM[A-Z0-9]{8})\b/);
+    events.push({ start, end, guests, code: codeM ? codeM[1] : null });
   }
   return events;
 }
@@ -1174,7 +1177,7 @@ function getNights(events, day) {
 function getGuests(events, day) {
   // Find the booking that checks IN on this day, return guest count
   for (const ev of events) {
-    if (sameDay(ev.start, day)) return ev.guests || null;
+    if (sameDay(ev.start, day)) return ev.guests || (ev.code && reservationGuests[ev.code]) || null;
   }
   return null;
 }
@@ -2168,6 +2171,8 @@ const DEFAULT_CHECKIN = '4:00 PM';
 let checkinTimes = {};
 // checkinGuests cache: key → guest count entered manually (Airbnb iCal has no guest count)
 let checkinGuests = {};
+// reservationGuests cache: Airbnb confirmation code → guest count (written by the Gmail sync script)
+let reservationGuests = {};
 const GUEST_OPTIONS = [1,2,3,4,5,6];
 
 async function loadCheckinTimes() {
@@ -2175,6 +2180,7 @@ async function loadCheckinTimes() {
   const snap = await getDocs(collection(db, 'checkins'));
   snap.forEach(d => {
     const data = d.data();
+    if (d.id.startsWith('res_')) { if (data.guests) reservationGuests[d.id.slice(4)] = parseInt(data.guests); return; }
     if (data.time) checkinTimes[d.id] = data.time;
     if (data.guests) checkinGuests[d.id] = data.guests;
   });
