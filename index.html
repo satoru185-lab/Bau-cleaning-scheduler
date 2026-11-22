@@ -2899,6 +2899,25 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     }
   }
 
+  // Also include assigned cleans beyond the cleaner's schedule window
+  // (e.g. admin assigned a date 3 weeks out but the cleaner only sees 2 weeks)
+  const today0 = new Date(); today0.setHours(0,0,0,0);
+  const icals = _icalCache || {};
+  for (const [key, c] of Object.entries(claims || {})) {
+    if (!c || c.cleaner !== currentUser.name) continue;
+    if (mySlots.find(m => m.key === key)) continue;
+    const [dStr, unit] = key.split('_');
+    if (!dStr || !unit) continue;
+    const day = new Date(dStr + 'T00:00:00');
+    if (isNaN(day) || day < today0) continue;
+    if (completedKeys.has(`${dStr}_${unit}`)) continue;
+    const isAB = unit === 'A' || unit === 'B';
+    const nights = getNights(icals[unit]||[], day) || (isAB ? getNights(icals['E']||[], day) : null);
+    const icalGuests = getGuests(icals[unit]||[], day) || (isAB ? getGuests(icals['E']||[], day) : null);
+    mySlots.push({ day, unit, nights, guests: guestsFor(day, unit, icalGuests), key });
+  }
+  mySlots.sort((a, b) => a.day - b.day || a.unit.localeCompare(b.unit));
+
   // Next clean banner
   const area = document.getElementById('next-clean-area');
   area.innerHTML = '';
