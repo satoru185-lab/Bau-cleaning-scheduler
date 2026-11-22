@@ -1946,6 +1946,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     header.className = 'day-header';
     header.style.fontWeight = isToday ? '600' : '';
     header.innerHTML = `<span>${formatDay(day)}${isToday ? ` <span style="color:var(--accent);">· ${t('today')}</span>` : ''}</span>`;
+    if (isToday) block.id = 'admin-today-anchor';
     block.appendChild(header);
 
     const grid = document.createElement('div');
@@ -2051,6 +2052,12 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
     block.appendChild(grid);
     container.appendChild(block);
   }
+
+  // Scroll today into view (past days visible above by scrolling up)
+  requestAnimationFrame(() => {
+    const anchor = document.getElementById('admin-today-anchor');
+    if (anchor) anchor.scrollIntoView({ behavior: 'instant', block: 'start' });
+  });
 }
 
 window.adminAssign = async function(key, date, unit, cleanerName) {
