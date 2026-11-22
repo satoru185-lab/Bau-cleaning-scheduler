@@ -921,50 +921,60 @@ async function initFirebase(config) {
 }
 
 // ── Boot ─────────────────────────────────────────────────
+// Promise that resolves once Firebase + checklists + checkin times are ready.
+// showApp() awaits this before doing any Firestore calls.
+let _firebaseReady = null;
+
 async function bootApp() {
+  // Show login (or auto-login from cache) IMMEDIATELY — no waiting for Firebase
+  let restoredUser = null;
   try {
-    await initFirebase(FIREBASE_CONFIG);
-    await Promise.all([loadChecklistsFromFirestore(), loadCheckinTimes()]);
-
-    // Auto-login if a previous session was saved
-    let restored = false;
-    try {
-      const saved = localStorage.getItem('savedUser');
-      if (saved) {
-        const u = JSON.parse(saved);
-        if (u && u.name && u.role) {
-          currentUser = u;
-          // For cleaners, refresh their profile from Firestore in case cashtag/accessLevel changed
-          if (u.role === 'cleaner') {
-            try {
-              const { doc, getDoc } = window._fb;
-              const snap = await getDoc(doc(db, 'cleaners', u.name.toLowerCase()));
-              if (snap.exists()) {
-                const d = snap.data();
-                currentUser = { name: d.name, role: 'cleaner', scheduleDays: d.scheduleDays || 14, cashtag: d.cashtag || '', pay: d.pay || 0, accessLevel: d.accessLevel || 'basic', ntfyTopic: d.ntfyTopic || '' };
-                localStorage.setItem('savedUser', JSON.stringify(currentUser));
-              }
-            } catch(e) { /* use cached profile if Firestore unreachable */ }
-          }
-          showApp();
-          restored = true;
-        }
-      }
-    } catch(e) {}
-
-    if (!restored) {
-      document.getElementById('login-card').style.display = 'block';
-      applyLang();
-      const bottomNav = document.querySelector('.bottom-nav');
-      if (bottomNav) bottomNav.style.display = 'none';
+    const saved = localStorage.getItem('savedUser');
+    if (saved) {
+      const u = JSON.parse(saved);
+      if (u && u.name && u.role) restoredUser = u;
     }
-  } catch(e) {
-    console.error('Firebase error:', e);
-    document.body.insertAdjacentHTML('afterbegin',
-      `<div style="background:#c8440a;color:white;padding:1rem;font-family:monospace;font-size:0.8rem;">
-        Firebase error: ${e.message}
-      </div>`);
+  } catch(e) {}
+
+  if (restoredUser) {
+    // Show app right away with cached user — Firebase loads in background
+    currentUser = restoredUser;
+    showApp(); // will await _firebaseReady internally for Firestore calls
+  } else {
+    // Show login form immediately
+    document.getElementById('login-card').style.display = 'block';
+    applyLang();
+    const bottomNav = document.querySelector('.bottom-nav');
+    if (bottomNav) bottomNav.style.display = 'none';
   }
+
+  // Start loading Firebase + data in background
+  _firebaseReady = (async () => {
+    try {
+      await initFirebase(FIREBASE_CONFIG);
+      await Promise.all([loadChecklistsFromFirestore(), loadCheckinTimes()]);
+
+      // If we auto-logged in, now refresh cleaner profile from Firestore
+      if (restoredUser && restoredUser.role === 'cleaner') {
+        try {
+          const { doc, getDoc } = window._fb;
+          const snap = await getDoc(doc(db, 'cleaners', restoredUser.name.toLowerCase()));
+          if (snap.exists()) {
+            const d = snap.data();
+            currentUser = { name: d.name, role: 'cleaner', scheduleDays: d.scheduleDays || 14, cashtag: d.cashtag || '', pay: d.pay || 0, accessLevel: d.accessLevel || 'basic', ntfyTopic: d.ntfyTopic || '' };
+            localStorage.setItem('savedUser', JSON.stringify(currentUser));
+          }
+        } catch(e) { /* keep cached profile if Firestore unreachable */ }
+      }
+    } catch(e) {
+      console.error('Firebase error:', e);
+      document.body.insertAdjacentHTML('afterbegin',
+        `<div style="background:#c8440a;color:white;padding:1rem;font-family:monospace;font-size:0.8rem;">
+          Firebase error: ${e.message}
+        </div>`);
+      throw e;
+    }
+  })();
 }
 
 // ── Login ─────────────────────────────────────────────────
@@ -973,6 +983,9 @@ window.login = async function() {
   const pin  = document.getElementById('login-pin').value.trim();
   const statusEl = document.getElementById('login-status');
   if (!name || !pin) { statusEl.textContent = t('nameAndPin'); statusEl.className='status error'; return; }
+
+  // Wait for Firebase to finish initialising (usually already done by the time user types)
+  if (_firebaseReady) await _firebaseReady;
 
   // Cleaner check first — a cleaner record always wins, even if PIN matches admin
   const { doc, getDoc } = window._fb;
@@ -1021,27 +1034,30 @@ function showApp() {
   applyLang();
   document.getElementById('app').style.display = 'block';
 
+  // Wait for Firebase to be ready before loading any data
+  const afterReady = fn => _firebaseReady ? _firebaseReady.then(fn).catch(() => {}) : fn();
+
   if (currentUser.role === 'admin') {
     document.getElementById('cleaner-view').style.display = 'none';
     document.getElementById('admin-view').style.display = 'block';
     // Default to Schedule tab on login
     document.getElementById('admin-activity').style.display = 'none';
     document.getElementById('admin-overview').style.display = 'block';
-    loadAdminSchedule();
-    loadAdminActivity();
-    loadCleanersList();
+    afterReady(() => { loadAdminSchedule(); loadAdminActivity(); loadCleanersList(); });
   } else {
     document.getElementById('cleaner-view').style.display = 'block';
     document.getElementById('admin-view').style.display = 'none';
     switchTab('home');
-    loadCleanerSchedule();
-    loadMyHistory();
-    // Restore in-progress checklist if cleaner closed app mid-clean
-    const saved = loadSavedClState();
-    if (saved && saved.unit && saved.date) {
-      // Brief delay so the schedule loads first
-      setTimeout(() => resumeChecklistFromSave(saved), 600);
-    }
+    afterReady(() => {
+      loadCleanerSchedule();
+      loadMyHistory();
+      // Restore in-progress checklist if cleaner closed app mid-clean
+      const saved = loadSavedClState();
+      if (saved && saved.unit && saved.date) {
+        // Brief delay so the schedule renders first
+        setTimeout(() => resumeChecklistFromSave(saved), 600);
+      }
+    });
   }
 }
 
@@ -1182,11 +1198,37 @@ function getGuests(events, day) {
   return null;
 }
 
-// Shared iCal cache so we only fetch once per session
+// Shared iCal cache — in-memory (per session) + localStorage (5-min TTL across opens)
 let _icalCache = null;
 let _icalErrors = {};
+const ICAL_CACHE_KEY = 'bauICal_v1';
+const ICAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function _loadICalsFromStorage() {
+  try {
+    const raw = localStorage.getItem(ICAL_CACHE_KEY);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > ICAL_CACHE_TTL) return null; // expired
+    return data;
+  } catch(e) { return null; }
+}
+
+function _saveICalsToStorage(icals) {
+  try {
+    localStorage.setItem(ICAL_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: icals }));
+  } catch(e) {}
+}
+
 async function fetchAllICals() {
   if (_icalCache) return _icalCache;
+  // Try localStorage cache first (fast path — skips all network calls)
+  const cached = _loadICalsFromStorage();
+  if (cached) {
+    _icalCache = cached;
+    console.log('iCal loaded from cache — events per unit:', Object.fromEntries(UNITS.map(u => [u, (cached[u]||[]).length])));
+    return _icalCache;
+  }
   const icals = {};
   _icalErrors = {};
   await Promise.all(UNITS.map(async u => {
@@ -1204,6 +1246,7 @@ async function fetchAllICals() {
     }
   }));
   _icalCache = icals;
+  _saveICalsToStorage(icals);
   // Warn in console so we can diagnose
   const failed = Object.keys(_icalErrors);
   if (failed.length) console.warn('iCal fetch failed for units:', _icalErrors);
@@ -1371,7 +1414,7 @@ window.togglePastSchedule = function() {
   window._showPastSchedule = !window._showPastSchedule;
   const btn = document.getElementById('past-toggle-btn');
   if (btn) btn.textContent = window._showPastSchedule ? '⬆ Hide past' : '⬆ Show past';
-  _icalCache = null; // force re-fetch so getDays picks up new range
+  _icalCache = null; try { localStorage.removeItem(ICAL_CACHE_KEY); } catch(e) {} // force re-fetch so getDays picks up new range
   loadCleanerSchedule();
 };
 
@@ -2283,7 +2326,7 @@ window.renderPreviewSchedule = async function renderPreviewSchedule() {
 
   // Fetch slots using the preview cleaner's schedule window (or 60 as default)
   loading.style.display = 'block';
-  _icalCache = null; // force fresh iCal fetch
+  _icalCache = null; try { localStorage.removeItem(ICAL_CACHE_KEY); } catch(e) {} // force fresh iCal fetch
   const savedUser = currentUser;
   currentUser = { ...currentUser, scheduleDays: window._previewScheduleDays || 60 };
   _previewSlots = await getCheckoutSlots();
