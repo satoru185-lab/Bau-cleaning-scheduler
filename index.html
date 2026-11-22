@@ -1251,12 +1251,12 @@ async function getCheckoutSlots() {
     for (const u of ['A','B','C','F']) {
       const s = classifyDay(icals[u]||[], day);
       if (s==='checkout'||s==='both') {
-        checkouts.push({ unit: u, nights: getNights(icals[u]||[], day), guests: getGuests(icals[u]||[], day) });
+        checkouts.push({ unit: u, nights: getNights(icals[u]||[], day), guests: guestsFor(day, u, getGuests(icals[u]||[], day)) });
       }
     }
     if (eStatus==='checkout'||eStatus==='both') {
-      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: eGuests });
-      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: eGuests });
+      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: guestsFor(day, 'A', eGuests) });
+      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: guestsFor(day, 'B', eGuests) });
     }
 
     // TBD for this day = units whose previous night was free (potential cleaning today)
@@ -1351,11 +1351,11 @@ async function getFullSchedule(futureDays = 60, pastDays = 0) {
       if (eActive && (u==='A'||u==='B') && (!status || status==='open')) {
         status = 'unavailable';
       }
-      unitRows.push({ unit: u, status: status || 'open', nights, guests });
+      unitRows.push({ unit: u, status: status || 'open', nights, guests: guestsFor(day, u, guests) });
     }
     // Only show E if it has an actual booking
     if (eActive) {
-      unitRows.push({ unit: 'E', status: eStatus, nights: eNights, guests: eGuests, combined: true });
+      unitRows.push({ unit: 'E', status: eStatus, nights: eNights, guests: guestsFor(day, 'E', eGuests), combined: true });
     }
     unitRows.sort((a,b) => a.unit.localeCompare(b.unit));
     result.push({ day, unitRows });
@@ -2018,12 +2018,21 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         const timeOpts = CHECKIN_TIMES.map(t =>
           `<option value="${t}" ${t===curTime?'selected':''}>${t}</option>`
         ).join('');
+        const guestOpts = `<option value="" ${!guests?'selected':''}>👥 ?</option>` + GUEST_OPTIONS.map(n =>
+          `<option value="${n}" ${n===guests?'selected':''}>👥 ${n}</option>`
+        ).join('');
         checkinHtml = `<div style="margin-top:0.3rem;">
           <span style="font-size:0.65rem;color:${cfg.color};opacity:0.8;">Check-in: </span>
-          <select onchange="setCheckinTime('${ciKey}','${dayKey(day)}','${unit}',this.value)"
-            style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.15rem 0.25rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
-            ${timeOpts}
-          </select>
+          <div style="display:flex;gap:0.25rem;align-items:center;margin-top:0.15rem;">
+            <select onchange="setCheckinTime('${ciKey}','${dayKey(day)}','${unit}',this.value)"
+              style="flex:1;min-width:0;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.15rem 0.25rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
+              ${timeOpts}
+            </select>
+            <select onchange="setCheckinGuests('${ciKey}','${dayKey(day)}','${unit}',this.value)" title="Guests"
+              style="flex:0 0 auto;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.15rem 0.25rem;border:1px solid ${cfg.border};border-radius:3px;background:white;cursor:pointer;">
+              ${guestOpts}
+            </select>
+          </div>
         </div>`;
       }
 
@@ -2080,7 +2089,6 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
         }
       }
 
-      const guestLabel = (isCheckin && guests) ? `<div style="font-size:0.72rem;font-weight:600;color:${cfg.color};margin-top:0.15rem;">👥 ${guests} guest${guests!==1?'s':''}</div>` : '';
       let sofaBedWarning = '';
       if (isCheckin && guests) {
         if ((unit === 'A' || unit === 'F') && guests >= 3) {
@@ -2095,9 +2103,8 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
           <span style="font-size:0.65rem;opacity:0.7;">${nightLabel}</span>
         </div>
         <div style="color:${isDone ? '#1a4a30' : isStaged ? '#2a5040' : cfg.color};font-size:0.68rem;margin-top:0.1rem;">${cfg.label}</div>
-        ${guestLabel}
-        ${sofaBedWarning}
-        ${checkinHtml}${assignHtml}${tbdHtml}${stagingHtml}`;
+        ${checkinHtml}
+        ${sofaBedWarning}${assignHtml}${tbdHtml}${stagingHtml}`;
       grid.appendChild(cell);
     }
 
@@ -2159,17 +2166,36 @@ const DEFAULT_CHECKIN = '4:00 PM';
 
 // checkinTimes cache: key → time (loaded from Firestore checkins collection)
 let checkinTimes = {};
+// checkinGuests cache: key → guest count entered manually (Airbnb iCal has no guest count)
+let checkinGuests = {};
+const GUEST_OPTIONS = [1,2,3,4,5,6];
 
 async function loadCheckinTimes() {
   const { collection, getDocs } = window._fb;
   const snap = await getDocs(collection(db, 'checkins'));
-  snap.forEach(d => { checkinTimes[d.id] = d.data().time; });
+  snap.forEach(d => {
+    const data = d.data();
+    if (data.time) checkinTimes[d.id] = data.time;
+    if (data.guests) checkinGuests[d.id] = data.guests;
+  });
 }
+
+// Manual guest count wins; fall back to anything parsed from iCal
+function guestsFor(day, unit, fallback) {
+  return checkinGuests[`${dayKey(day)}_${unit}_ci`] || fallback || null;
+}
+
+window.setCheckinGuests = async function(key, date, unit, val) {
+  const { doc, setDoc } = window._fb;
+  const n = parseInt(val) || 0;
+  if (n) checkinGuests[key] = n; else delete checkinGuests[key];
+  await setDoc(doc(db, 'checkins', key), { date, unit, guests: n || null }, { merge: true });
+};
 
 window.setCheckinTime = async function(key, date, unit, time) {
   const { doc, setDoc } = window._fb;
   checkinTimes[key] = time;
-  await setDoc(doc(db, 'checkins', key), { date, unit, time });
+  await setDoc(doc(db, 'checkins', key), { date, unit, time }, { merge: true });
   // Also update any existing claim for this slot
   const { getDoc } = window._fb;
   const claimSnap = await getDoc(doc(db, 'claims', key));
