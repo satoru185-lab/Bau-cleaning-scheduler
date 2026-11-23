@@ -1304,8 +1304,20 @@ async function getCheckoutSlots() {
       }
     }
     if (eStatus==='checkout'||eStatus==='both') {
-      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: guestsFor(day, 'A', eGuests), combinedE: true });
-      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: guestsFor(day, 'B', eGuests), combinedE: true });
+      // Unit E booking: show a single Unit E slot instead of A and B separately
+      if (!checkouts.find(c=>c.unit==='E')) {
+        checkouts.push({ unit: 'E', nights: eNights, guests: eGuests, combinedE: false });
+      }
+      // Remove any A/B slots that were added from individual iCal (they're part of E)
+      const toRemove = new Set(['A','B']);
+      for (let i = checkouts.length - 1; i >= 0; i--) {
+        if (toRemove.has(checkouts[i].unit) && !checkouts[i].combinedE) {
+          // Only remove if it was an individual unit checkout that's part of Unit E
+          // Keep if it has its own independent booking
+          const indivStatus = classifyDay(icals[checkouts[i].unit]||[], day);
+          if (!indivStatus || indivStatus === 'open') checkouts.splice(i, 1);
+        }
+      }
     }
 
     // TBD for this day = units whose previous night was free (potential cleaning today)
@@ -1398,15 +1410,8 @@ async function getFullSchedule(futureDays = 60, pastDays = 0) {
       let status = classifyDay(icals[u]||[], day);
       let nights = getNights(icals[u]||[], day);
       let guests = getGuests(icals[u]||[], day);
-      // E combined: if E checks out, A and B become checkouts
-      if ((eStatus==='checkout'||eStatus==='both') && (u==='A'||u==='B')) {
-        if (!status || status==='checkin') {
-          status = eStatus;
-          nights = eNights;
-          guests = eGuests;
-        }
-      }
-      // If E is active, A and B are unavailable unless they have their own booking
+      // If E is active, A and B are unavailable unless they have their own independent booking
+      // (Unit E combined bookings handle checkout/checkin as a single Unit E slot)
       if (eActive && (u==='A'||u==='B') && (!status || status==='open')) {
         status = 'unavailable';
       }
