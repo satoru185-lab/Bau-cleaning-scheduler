@@ -1356,28 +1356,21 @@ async function getCheckoutSlots() {
               ts: new Date().toISOString()
             });
           } catch(e) { console.warn('Auto-assign activity log failed:', e); }
-          // Send push notification to Satoru with SMS deep-link to the cleaner
-          // Also push directly to the cleaner if they have an ntfy topic
+          // Notify Satoru + open SMS to cleaner automatically
           try {
             const cleanerSnap = await getDoc(doc(db, 'cleaners', cleanerName.toLowerCase()));
             const cleanerPhone = cleanerSnap.exists() ? (cleanerSnap.data().phone || '') : '';
-            const cleanerNtfy  = cleanerSnap.exists() ? (cleanerSnap.data().ntfyTopic || '') : '';
             const smsText = encodeURIComponent(`Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. See the app for details.`);
-            const smsLink = cleanerPhone ? `sms:${cleanerPhone}&body=${smsText}` : '';
-            const extraHeaders = smsLink ? { 'Actions': `view, Text ${cleanerName}, ${smsLink}` } : {};
-            // Notify Satoru
+            // Notify Satoru via push
             notifySatoru(
               `✅ ${cleanerName} → Unit ${unit} confirmed`,
-              `${cleanerName} was auto-assigned Unit ${unit} on ${dateLabel} from their waitlist.${cleanerPhone ? ' Tap to send confirmation text.' : ''}`,
-              'white_check_mark',
-              extraHeaders
+              `${cleanerName} confirmed for Unit ${unit} on ${dateLabel} (from waitlist).`,
+              'white_check_mark'
             );
-            // Notify the cleaner directly
-            notifyCleaner(
-              cleanerNtfy,
-              `🎉 Booking confirmed — Unit ${unit}`,
-              `Your waitlisted slot for Unit ${unit} on ${dateLabel} just got booked. You're confirmed for cleaning!`
-            );
+            // Open SMS from Satoru's phone to the cleaner automatically
+            if (cleanerPhone) {
+              window.location.href = `sms:${cleanerPhone}&body=${smsText}`;
+            }
           } catch(e) { console.warn('Auto-assign notification failed:', e); }
         }
       }
