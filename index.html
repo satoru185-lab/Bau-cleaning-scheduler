@@ -3623,6 +3623,11 @@ function updateProgress(unit) {
         } catch(e) { /* silent */ }
       }
 
+      // Reset the guard so notifyOwner works fresh for this clean
+      _notifyOwnerFired = false;
+      const nb = document.getElementById('notify-btn');
+      if (nb) { nb.disabled = false; nb.textContent = '✅ Notify Satoru — Unit Ready'; }
+
       document.getElementById('complete-screen').style.display = 'block';
       // Always hide bottom nav when complete screen shows
       const bottomNav = document.querySelector('.bottom-nav');
@@ -3632,7 +3637,14 @@ function updateProgress(unit) {
 }
 
 
+let _notifyOwnerFired = false;
 window.notifyOwner = async function() {
+  // Guard against double-tap / re-render firing this multiple times
+  if (_notifyOwnerFired) return;
+  _notifyOwnerFired = true;
+  const btn = document.getElementById('notify-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+
   clearClState(); // job is done — no need to resume
   // Write to history collection
   try {
