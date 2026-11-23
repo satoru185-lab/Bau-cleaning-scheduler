@@ -764,9 +764,9 @@ const TRANSLATIONS = {
     sendPayRequest: 'Send Payment Request →',
     skipForNow: 'Skip for now',
     checkinBannerTitle: '🏠 Guests check in today!',
-    checkinBannerBody: '💡 Turn on bedside lamps<br>💡 Leave a few accent lights on<br>🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp<br>🚪 Leave the unit looking welcoming',
+    checkinBannerBody: '💡 Turn on bedside lamps<br>💡 Leave a few accent lights on<br>🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp',
     nocheckBannerTitle: '🌙 No check-in today',
-    nocheckBannerBody: '💡 Turn off all lights<br>🌡️ Turn the thermostat <strong>down</strong><br>🔒 Make sure the unit is locked up',
+    nocheckBannerBody: '💡 Turn off all lights<br>🌡️ Turn the thermostat <strong>down</strong>',
     ratingNoteLow: '📸 Take a photo and send it to Satoru',
     ratingNoteMid: 'Could be better — note any issues',
     ratingNoteHigh: 'Great! Guests left it tidy 👍',
@@ -3421,15 +3421,13 @@ async function showClStagingHint(unit, date) {
       el.style.borderColor = '#5a8a6a';
       el.innerHTML = `<strong>📋 Check-in today — stage the unit when done</strong><br>
         💡 Turn on bedside lamps &amp; a few accent lights<br>
-        🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp<br>
-        🚪 Leave the unit looking welcoming`;
+        🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp`;
     } else {
       el.style.background = '#f5f5f5';
       el.style.borderColor = '#ccc';
-      el.innerHTML = `<strong>🔒 No check-in today — close up when done</strong><br>
+      el.innerHTML = `<strong>No check-in today — close up when done</strong><br>
         💡 Turn off all lights<br>
-        🌡️ Turn the thermostat <strong>down</strong><br>
-        🔒 Lock up and make sure everything is off`;
+        🌡️ Turn the thermostat <strong>down</strong>`;
     }
     el.style.display = 'block';
   } catch(e) { /* silent — don't block the checklist */ }
