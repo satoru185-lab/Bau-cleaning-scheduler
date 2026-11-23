@@ -483,6 +483,9 @@ body { padding-bottom: 5rem; }
     <div class="room-tabs" id="cl-room-tabs"></div>
   </div>
 
+  <!-- Staging hint shown at the START of cleaning so cleaner knows before entering the unit -->
+  <div id="cl-staging-hint" style="display:none;margin:0 0.75rem 0.5rem;padding:0.65rem 0.85rem;border-radius:8px;font-size:0.82rem;line-height:1.5;border:1px solid #ccc;"></div>
+
   <div class="checklist-body" id="cl-body">
     <!-- room content injected here -->
   </div>
@@ -1082,6 +1085,7 @@ function resumeChecklistFromSave(saved) {
     document.getElementById('checklist-screen').style.display = 'block';
     buildRoomTabs(clState.unit);
     renderRoom(clState.unit, clState.roomIndex || 0);
+    showClStagingHint(clState.unit, clState.date);
     // Restore active tab highlight
     const tabs = document.querySelectorAll('.room-tab');
     tabs.forEach((t,i) => t.classList.toggle('active', i === (clState.roomIndex || 0)));
@@ -3400,6 +3404,37 @@ window.selectRating = function(stars) {
   document.getElementById('start-checklist-btn').style.pointerEvents = 'auto';
 };
 
+// Show a staging/closing hint banner at the TOP of the checklist so the cleaner
+// knows what to do at the end BEFORE they start (not after they're in the laundry room).
+async function showClStagingHint(unit, date) {
+  const el = document.getElementById('cl-staging-hint');
+  if (!el) return;
+  try {
+    const icals = await fetchAllICals();
+    const cleanDay = new Date(date + 'T12:00:00');
+    const unitStatus = classifyDay(icals[unit] || [], cleanDay);
+    const eStatus = classifyDay(icals['E'] || [], cleanDay);
+    const hasCheckin = unitStatus === 'checkin' || unitStatus === 'both'
+      || ((unit === 'A' || unit === 'B') && (eStatus === 'checkin' || eStatus === 'both'));
+    if (hasCheckin) {
+      el.style.background = '#eef4ee';
+      el.style.borderColor = '#5a8a6a';
+      el.innerHTML = `<strong>📋 Check-in today — stage the unit when done</strong><br>
+        💡 Turn on bedside lamps &amp; a few accent lights<br>
+        🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp<br>
+        🚪 Leave the unit looking welcoming`;
+    } else {
+      el.style.background = '#f5f5f5';
+      el.style.borderColor = '#ccc';
+      el.innerHTML = `<strong>🔒 No check-in today — close up when done</strong><br>
+        💡 Turn off all lights<br>
+        🌡️ Turn the thermostat <strong>down</strong><br>
+        🔒 Lock up and make sure everything is off`;
+    }
+    el.style.display = 'block';
+  } catch(e) { /* silent — don't block the checklist */ }
+}
+
 window.startChecklistAfterRating = function() {
   clState.ratingDone = true;
   saveClState();
@@ -3420,6 +3455,8 @@ window.startChecklistAfterRating = function() {
     document.getElementById('cl-body').style.display = 'block';
     buildRoomTabs(clState.unit);
     renderRoom(clState.unit, 0);
+    // Show staging hint banner at the top so cleaner knows before entering the unit
+    showClStagingHint(clState.unit, clState.date);
   }, 300);
 };
 
