@@ -1082,8 +1082,8 @@ function resumeChecklistFromSave(saved) {
     if (paySection) paySection.style.display = 'none';
     document.getElementById('cl-body').style.display = 'block';
     document.getElementById('checklist-screen').style.display = 'block';
-    buildRoomTabs(clState.unit);
-    renderRoom(clState.unit, clState.roomIndex || 0);
+    buildRoomTabs(clState.checklistUnit || clState.unit);
+    renderRoom(clState.checklistUnit || clState.unit, clState.roomIndex || 0);
     showClStagingHint(clState.unit, clState.date);
     // Restore active tab highlight
     const tabs = document.querySelectorAll('.room-tab');
@@ -2982,13 +2982,13 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
 
   const mySlots = [];
   for (const { day, checkouts } of slots) {
-    for (const { unit, nights, guests } of checkouts) {
+    for (const { unit, nights, guests, combinedE } of checkouts) {
       const key = slotKey(day, unit);
       if (claims[key] && claims[key].cleaner === currentUser.name) {
         // Skip if already completed (key format matches history doc id: YYYY-MM-DD_UNIT)
         const histKey = `${dayKey(day)}_${unit}`;
         if (completedKeys.has(histKey)) continue;
-        mySlots.push({ day, unit, nights, guests, key });
+        mySlots.push({ day, unit, nights, guests, key, combinedE });
       }
     }
   }
@@ -3008,7 +3008,9 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     const isAB = unit === 'A' || unit === 'B';
     const nights = getNights(icals[unit]||[], day) || (isAB ? getNights(icals['E']||[], day) : null);
     const icalGuests = getGuests(icals[unit]||[], day) || (isAB ? getGuests(icals['E']||[], day) : null);
-    mySlots.push({ day, unit, nights, guests: guestsFor(day, unit, icalGuests), key });
+    const eStatus = isAB ? classifyDay(icals['E']||[], day) : null;
+    const combinedE = isAB && (eStatus === 'checkout' || eStatus === 'both') && !classifyDay(icals[unit]||[], day);
+    mySlots.push({ day, unit, nights, guests: guestsFor(day, unit, icalGuests), key, combinedE });
   }
   mySlots.sort((a, b) => a.day - b.day || a.unit.localeCompare(b.unit));
 
@@ -3018,18 +3020,19 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
   if (mySlots.length === 0) {
     area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">${t('noUpcoming')}</div></div>`;
   } else {
-    const { day, unit, nights, guests } = mySlots[0];
+    const { day, unit, nights, guests, combinedE } = mySlots[0];
     const isToday = sameDay(day, new Date());
     const dateLabel = isToday ? t('today') : formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
     const ciKey = `${dayKey(day)}_${unit}_ci`;
     const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
+    const unitDisplay = combinedE ? `Unit ${unit} <span style="font-size:0.75rem;opacity:0.75;">(Unit E)</span>` : `Unit ${unit}`;
     area.innerHTML = `
       <div class="next-clean-card">
         <div class="next-clean-label">${t('nextClean')}</div>
         <div class="next-clean-date">${dateLabel}</div>
-        <div class="next-clean-unit">Unit ${unit}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
-        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}')">
+        <div class="next-clean-unit">${unitDisplay}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
+        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">
           ${t('openChecklist')}
         </button>
       </div>`;
@@ -3042,14 +3045,15 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     return;
   }
   list.innerHTML = '';
-  for (const { day, unit, nights, guests } of mySlots) {
+  for (const { day, unit, nights, guests, combinedE } of mySlots) {
     const isToday = sameDay(day, new Date());
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);';
     const dateLabel = isToday ? `<span style="color:var(--accent);font-weight:500;">${t('today')}</span>` : formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
-    row.innerHTML = `<span>${dateLabel} — Unit ${unit}${nightLabel}</span>
-      <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}')">${t('checklist')}</button>`;
+    const unitLabel = combinedE ? `Unit ${unit} <span style="color:var(--muted);font-size:0.7rem;">(Unit E)</span>` : `Unit ${unit}`;
+    row.innerHTML = `<span>${dateLabel} — ${unitLabel}${nightLabel}</span>
+      <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">${t('checklist')}</button>`;
     list.appendChild(row);
   }
 }
@@ -3377,10 +3381,11 @@ function loadSavedClState() {
 // Completed cleans available for payment requests (populated by loadMyHistory)
 let _completedCleans = [];
 
-window.openChecklist = function(unit, date, nights, guests) {
-  clState = { unit, date, nights: parseInt(nights)||0, guests: parseInt(guests)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString() };
+window.openChecklist = function(unit, date, nights, guests, checklistUnit) {
+  const clUnit = checklistUnit || unit; // use E checklist when it's a combined booking
+  clState = { unit, date, nights: parseInt(nights)||0, guests: parseInt(guests)||0, roomIndex: 0, checked: {}, guestRating: 0, startedAt: new Date().toISOString(), checklistUnit: clUnit };
   saveClState();
-  document.getElementById('cl-title').textContent = `Unit ${unit}`;
+  document.getElementById('cl-title').textContent = clUnit !== unit ? `Unit ${unit} · E checklist` : `Unit ${unit}`;
   document.getElementById('cl-date').textContent = date + (clState.nights ? ` · ${clState.nights} night${clState.nights===1?'':'s'}` : '');
   document.getElementById('complete-screen').style.display = 'none';
   document.getElementById('cl-body').style.display = 'none';
@@ -3466,8 +3471,8 @@ window.startChecklistAfterRating = function() {
   setTimeout(() => {
     document.getElementById('rating-screen').style.display = 'none';
     document.getElementById('cl-body').style.display = 'block';
-    buildRoomTabs(clState.unit);
-    renderRoom(clState.unit, 0);
+    buildRoomTabs(clState.checklistUnit || clState.unit);
+    renderRoom(clState.checklistUnit || clState.unit, 0);
     // Show staging hint banner at the top so cleaner knows before entering the unit
     showClStagingHint(clState.unit, clState.date);
   }, 300);
@@ -3583,7 +3588,7 @@ window.roomCarouselStep = function(roomIdx, dir) {
 };
 
 window.openLightboxCarousel = function(roomIdx) {
-  const rooms = (clState && clState.unit) ? (UNIT_CHECKLISTS[clState.unit] || {rooms:[]}).rooms : [];
+  const rooms = (clState && clState.unit) ? (UNIT_CHECKLISTS[clState.checklistUnit || clState.unit] || {rooms:[]}).rooms : [];
   if (!rooms.length) return;
   // Build flat list of all photos across all rooms
   const allPhotos = [];
@@ -3615,7 +3620,7 @@ window.toggleCheck = function(roomIdx, itemIdx) {
   const key = `${roomIdx}-${itemIdx}`;
   clState.checked[key] = !clState.checked[key];
   saveClState();
-  renderRoom(clState.unit, roomIdx);
+  renderRoom(clState.checklistUnit || clState.unit, roomIdx);
 };
 
 function updateProgress(unit) {
