@@ -1328,6 +1328,16 @@ async function getCheckoutSlots() {
         if (!claimSnap.exists() && tbdSnap.exists()) {
           const cleanerName = tbdSnap.data().cleaner;
           const dateLabel = new Date(dayKey(day) + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+          // Log the new booking itself
+          try {
+            const { collection, addDoc } = window._fb;
+            await addDoc(collection(db, 'activity'), {
+              type: 'new_booking',
+              message: `New booking — Unit ${unit} · ${dateLabel}`,
+              unit, date: dayKey(day), actor: 'system',
+              ts: new Date().toISOString()
+            });
+          } catch(e) { console.warn('New booking activity log failed:', e); }
           await setDoc(doc(db, 'claims', key), {
             cleaner: cleanerName,
             date: dayKey(day), unit,
@@ -1347,17 +1357,26 @@ async function getCheckoutSlots() {
             });
           } catch(e) { console.warn('Auto-assign activity log failed:', e); }
           // Send push notification to Satoru with SMS deep-link to the cleaner
+          // Also push directly to the cleaner if they have an ntfy topic
           try {
             const cleanerSnap = await getDoc(doc(db, 'cleaners', cleanerName.toLowerCase()));
             const cleanerPhone = cleanerSnap.exists() ? (cleanerSnap.data().phone || '') : '';
+            const cleanerNtfy  = cleanerSnap.exists() ? (cleanerSnap.data().ntfyTopic || '') : '';
             const smsText = encodeURIComponent(`Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. See the app for details.`);
             const smsLink = cleanerPhone ? `sms:${cleanerPhone}&body=${smsText}` : '';
             const extraHeaders = smsLink ? { 'Actions': `view, Text ${cleanerName}, ${smsLink}` } : {};
+            // Notify Satoru
             notifySatoru(
               `✅ ${cleanerName} → Unit ${unit} confirmed`,
               `${cleanerName} was auto-assigned Unit ${unit} on ${dateLabel} from their waitlist.${cleanerPhone ? ' Tap to send confirmation text.' : ''}`,
               'white_check_mark',
               extraHeaders
+            );
+            // Notify the cleaner directly
+            notifyCleaner(
+              cleanerNtfy,
+              `🎉 Booking confirmed — Unit ${unit}`,
+              `Your waitlisted slot for Unit ${unit} on ${dateLabel} just got booked. You're confirmed for cleaning!`
             );
           } catch(e) { console.warn('Auto-assign notification failed:', e); }
         }
@@ -3189,6 +3208,18 @@ async function notifySatoru(title, body, tags = 'broom', extraHeaders = {}) {
   } catch(e) { /* silent */ }
 }
 
+// Send a push notification directly to a cleaner if they have an ntfy topic set
+async function notifyCleaner(ntfyTopic, title, body, tags = 'bell') {
+  if (!ntfyTopic) return;
+  try {
+    await fetch(`https://ntfy.sh/${ntfyTopic}`, {
+      method: 'POST',
+      headers: { 'Title': title, 'Priority': 'high', 'Tags': tags },
+      body
+    });
+  } catch(e) { /* silent */ }
+}
+
 // Checklist state
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {}, guestRating: 0 };
 
@@ -3800,7 +3831,7 @@ function loadAdminActivity() {
       content.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:1rem 0;">No activity yet.</div>';
       return;
     }
-    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', tbd_claim:'⏳', tbd_cancel:'❌', admin_assign:'🔧', admin_reassign:'🔄', admin_remove:'🗑️', auto_assign:'🤖', start:'🧹', rating:'⭐', staged:'🏠', default:'🔔' };
+    const ICONS = { claim:'📋', unclaim:'↩️', complete:'✅', payment_request:'💵', paid:'💚', tbd_claim:'⏳', tbd_cancel:'❌', admin_assign:'🔧', admin_reassign:'🔄', admin_remove:'🗑️', auto_assign:'🤖', new_booking:'🏡', start:'🧹', rating:'⭐', staged:'🏠', default:'🔔' };
     snap.forEach(d => {
       const r = d.data();
       const icon = ICONS[r.type] || ICONS.default;
