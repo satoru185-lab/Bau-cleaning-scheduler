@@ -1569,7 +1569,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
         rightSide = `<button class="claim-btn claim" onclick="claimSlot('${key}', '${dayKey(day)}', '${unit}')">${t('claim')}</button>`;
       }
 
-      const guestCountLine = guests ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;">👥 ${guests} guest${guests!==1?'s':''} checking in</div>` : '';
+      const guestCountLine = guests ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;">👥 ${guests} guest${guests!==1?'s':''} checking in${combinedE ? ' · <strong>Unit E</strong> (A+B as one)' : ''}</div>` : '';
       let linenNote = '';
       if (guests) {
         if (combinedE && unit === 'B') {
