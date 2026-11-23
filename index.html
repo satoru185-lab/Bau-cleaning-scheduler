@@ -2314,6 +2314,7 @@ let _previewClaims = {};
 let _previewTbdClaims = {};
 let _previewSlots = null;
 let _previewListenersStarted = false;
+let _previewCompletedKeys = new Set();
 
 window._doRenderPreview = function _doRenderPreview() {
   const container = document.getElementById('admin-preview-content');
@@ -2329,7 +2330,7 @@ window._doRenderPreview = function _doRenderPreview() {
   const fakeUser = { name: previewName, role: 'cleaner', accessLevel: access, scheduleDays: previewDays };
   const savedUser = currentUser;
   currentUser = fakeUser;
-  renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, new Set());
+  renderCleanerSchedule(_previewSlots, _previewClaims, _previewTbdClaims, container, _previewCompletedKeys);
   currentUser = savedUser;
 }
 
@@ -2366,6 +2367,12 @@ window.renderPreviewSchedule = async function renderPreviewSchedule() {
     onSnapshot(collection(db, 'tbd_claims'), snap => {
       _previewTbdClaims = {};
       snap.forEach(d => { _previewTbdClaims[d.id] = d.data(); });
+      if (document.getElementById('admin-preview').style.display !== 'none') window._doRenderPreview();
+    });
+    onSnapshot(collection(db, 'history'), snap => {
+      const name = window._previewCleanerName || '';
+      _previewCompletedKeys = new Set();
+      snap.forEach(d => { if (!name || d.data().cleaner === name) _previewCompletedKeys.add(d.id); });
       if (document.getElementById('admin-preview').style.display !== 'none') window._doRenderPreview();
     });
   }
