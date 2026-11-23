@@ -1831,8 +1831,8 @@ window.unclaim = async function(key) {
 
 // ── Admin view ───────────────────────────────────────────
 let adminSlots = [], adminCleanerNames = [];
-
 let adminFullSlots = [];
+let adminHistoryNights = {}; // key → nights, for accurate past occupancy
 
 async function loadAdminSchedule() {
   const container = document.getElementById('admin-schedule');
@@ -1852,7 +1852,7 @@ async function loadAdminSchedule() {
   let adminStagedKeys = new Set();
 
   function reRenderAdmin() {
-    renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys, adminStagedKeys);
+    renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys, adminStagedKeys, adminHistoryNights);
   }
 
   // "Show past" toggle fires a custom event on the container
@@ -1866,7 +1866,11 @@ async function loadAdminSchedule() {
 
   onSnapshot(collection(db, 'history'), histSnap => {
     adminCompletedKeys = new Set();
-    histSnap.forEach(d => { adminCompletedKeys.add(d.id); });
+    adminHistoryNights = {};
+    histSnap.forEach(d => {
+      adminCompletedKeys.add(d.id);
+      if (d.data().nights) adminHistoryNights[d.id] = d.data().nights;
+    });
     reRenderAdmin();
   });
 
@@ -1899,7 +1903,7 @@ const STATUS_CONFIG = {
   unavailable: { label: 'N/A (Unit E)',   bg: '#f0ece4', border: '#c8b89a', color: '#a08060' },
 };
 
-function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container, completedKeys = new Set(), stagedKeys = new Set()) {
+function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container, completedKeys = new Set(), stagedKeys = new Set(), historyNights = {}) {
   // backward compat: if checkoutSlots is actually claims object (old call signature), shift args
   if (checkoutSlots && !Array.isArray(checkoutSlots)) {
     completedKeys = container || new Set();
@@ -1919,11 +1923,12 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   const past30Start = new Date(today); past30Start.setDate(today.getDate() - 30);
   const next30End   = new Date(today); next30End.setDate(today.getDate() + 30);
 
-  // Past 30d checkouts: count from claims + history records (keys = YYYY-MM-DD_Unit)
-  const past30CheckoutDays = new Set([...Object.keys(claims), ...completedKeys].filter(k => {
-    const d = new Date(k.slice(0, 10) + 'T12:00:00');
-    return d >= past30Start && d < today;
-  })).size;
+  // Past 30d occupancy: sum actual nights from history records (most accurate source)
+  let past30NightsFromHistory = 0;
+  for (const [key, nights] of Object.entries(historyNights)) {
+    const d = new Date(key.slice(0, 10) + 'T12:00:00');
+    if (d >= past30Start && d < today) past30NightsFromHistory += (nights || 0);
+  }
 
   // Confirmed checkout counts (from full schedule slots)
   let checkinOnlyTodayCount = 0;
@@ -1961,11 +1966,10 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   }
 
   const pctNext30 = Math.round(bookedNext30 / (4 * 30) * 100);
-  // Past occupancy: use iCal data if available (>0), else estimate from claims/history records
-  // Each checkout record ≈ avg 3-night stay; total possible = 4 units × 30 nights
-  const pctPast30 = bookedPast30 > 0
-    ? Math.round(bookedPast30 / (4 * 30) * 100)
-    : Math.round(Math.min(past30CheckoutDays * 3, 4 * 30) / (4 * 30) * 100);
+  // Past occupancy: sum actual nights from history records (iCal has no past data)
+  const pctPast30 = past30NightsFromHistory > 0
+    ? Math.round(Math.min(past30NightsFromHistory, 4 * 30) / (4 * 30) * 100)
+    : (bookedPast30 > 0 ? Math.round(bookedPast30 / (4 * 30) * 100) : null);
 
   // TBD counts — next 30 days only
   for (const { day, tbd } of (checkoutSlots || [])) {
@@ -2003,7 +2007,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
       ${readyLine}
-      <span style="color:var(--muted);">📅 <strong>${pctNext30}%</strong> occupancy · next 30d &nbsp;|&nbsp; <strong>${pctPast30}%</strong> · last 30d</span>
+      <span style="color:var(--muted);">📅 <strong>${pctNext30}%</strong> occupancy · next 30d &nbsp;|&nbsp; <strong>${pctPast30 !== null ? pctPast30 + '%' : '—'}</strong> · last 30d</span>
       <span style="color:var(--green);opacity:0.7;">✓ ${claimedCount}/${totalCheckouts} checkouts assigned · next 30 days</span>
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
