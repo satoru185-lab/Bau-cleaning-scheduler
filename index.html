@@ -1304,8 +1304,8 @@ async function getCheckoutSlots() {
       }
     }
     if (eStatus==='checkout'||eStatus==='both') {
-      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: guestsFor(day, 'A', eGuests) });
-      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: guestsFor(day, 'B', eGuests) });
+      if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: guestsFor(day, 'A', eGuests), combinedE: true });
+      if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: guestsFor(day, 'B', eGuests), combinedE: true });
     }
 
     // TBD for this day = units whose previous night was free (potential cleaning today)
@@ -1538,7 +1538,7 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
     slotsDiv.className = 'slots';
 
     // Confirmed checkout slots
-    for (const {unit, nights, guests} of visibleSlots) {
+    for (const {unit, nights, guests, combinedE} of visibleSlots) {
       const key = slotKey(day, unit);
       const histKey = `${dayKey(day)}_${unit}`;
       const ciKey = `${dayKey(day)}_${unit}_ci`;
@@ -1572,7 +1572,12 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
       const guestCountLine = guests ? `<div style="font-size:0.68rem;color:var(--muted);margin-top:0.2rem;">👥 ${guests} guest${guests!==1?'s':''} checking in</div>` : '';
       let linenNote = '';
       if (guests) {
-        if ((unit === 'A' || unit === 'F') && guests >= 3) {
+        if (combinedE && unit === 'B') {
+          // Unit E booking (A+B combined) — set up sofa bed in upstairs apartment (Unit B)
+          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Set up sofa bed in upstairs living room</div>`;
+        } else if (unit === 'F' && guests >= 3) {
+          linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (air mattress)</div>`;
+        } else if (unit === 'A' && guests >= 3 && !combinedE) {
           linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (air mattress)</div>`;
         } else if (unit === 'C' && guests >= 3) {
           linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (sofa bed)</div>`;
