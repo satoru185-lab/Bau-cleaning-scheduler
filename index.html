@@ -1356,21 +1356,19 @@ async function getCheckoutSlots() {
               ts: new Date().toISOString()
             });
           } catch(e) { console.warn('Auto-assign activity log failed:', e); }
-          // Notify Satoru + open SMS to cleaner automatically
+          // Notify Satoru + prompt to text cleaner (don't auto-open SMS)
           try {
             const cleanerSnap = await getDoc(doc(db, 'cleaners', cleanerName.toLowerCase()));
             const cleanerPhone = cleanerSnap.exists() ? (cleanerSnap.data().phone || '') : '';
-            const smsText = encodeURIComponent(`Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. See the app for details.`);
+            const smsBody = `Hi ${cleanerName}! Unit ${unit} on ${dateLabel} just got booked — you're confirmed for cleaning. See the app for details.`;
             // Notify Satoru via push
             notifySatoru(
               `✅ ${cleanerName} → Unit ${unit} confirmed`,
               `${cleanerName} confirmed for Unit ${unit} on ${dateLabel} (from waitlist).`,
               'white_check_mark'
             );
-            // Open SMS from Satoru's phone to the cleaner automatically
-            if (cleanerPhone) {
-              window.location.href = `sms:${cleanerPhone}&body=${smsText}`;
-            }
+            // Show in-app SMS prompt banner for Satoru
+            showSmsPrompt(cleanerName, cleanerPhone, unit, dateLabel, smsBody);
           } catch(e) { console.warn('Auto-assign notification failed:', e); }
         }
       }
@@ -1438,6 +1436,9 @@ async function loadCleanerSchedule() {
 
   const slots = await getCheckoutSlots();
   loading.style.display = 'none';
+
+  // Show any auto-assign confirmation banners for this cleaner
+  showCleanerConfirmations();
 
   // Show warning banner if iCal failed to load
   const failedUnits = Object.keys(_icalErrors);
@@ -3212,6 +3213,128 @@ async function notifyCleaner(ntfyTopic, title, body, tags = 'bell') {
     });
   } catch(e) { /* silent */ }
 }
+
+// Show an in-app SMS prompt banner for Satoru when a cleaner is auto-assigned
+function showSmsPrompt(cleanerName, cleanerPhone, unit, dateLabel, smsBody) {
+  // Remove any existing prompt
+  const existing = document.getElementById('sms-prompt-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'sms-prompt-banner';
+  banner.style.cssText = `
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+    background: #1a3a2a; color: #fff;
+    padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3); flex-wrap: wrap;
+  `;
+
+  const msg = document.createElement('span');
+  msg.style.cssText = 'flex: 1; font-size: 15px; line-height: 1.4;';
+  msg.innerHTML = `🤖 <strong>${cleanerName}</strong> auto-confirmed for Unit ${unit} · ${dateLabel}`;
+  banner.appendChild(msg);
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+
+  if (cleanerPhone) {
+    const smsBtn = document.createElement('button');
+    smsBtn.textContent = `📱 Text ${cleanerName}`;
+    smsBtn.style.cssText = `
+      background: #22c55e; color: #fff; border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 14px; font-weight: 600; cursor: pointer;
+    `;
+    smsBtn.onclick = () => {
+      window.location.href = `sms:${cleanerPhone}&body=${encodeURIComponent(smsBody)}`;
+      banner.remove();
+    };
+    actions.appendChild(smsBtn);
+  }
+
+  const dismiss = document.createElement('button');
+  dismiss.textContent = '✕';
+  dismiss.style.cssText = `
+    background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 6px;
+    padding: 6px 10px; font-size: 14px; cursor: pointer;
+  `;
+  dismiss.onclick = () => banner.remove();
+  actions.appendChild(dismiss);
+
+  banner.appendChild(actions);
+  document.body.prepend(banner);
+
+  // Auto-dismiss after 60 seconds if not acted on
+  setTimeout(() => { if (document.getElementById('sms-prompt-banner')) banner.remove(); }, 60000);
+}
+
+// Show confirmed-booking banners for the cleaner when they open the app
+async function showCleanerConfirmations() {
+  if (!currentUser || currentUser.role !== 'cleaner') return;
+  const db = window._db;
+  if (!db) return;
+  try {
+    const { collection, query, where, getDocs, doc, updateDoc } = window._fb;
+    const q = query(
+      collection(db, 'claims'),
+      where('cleaner', '==', currentUser.name),
+      where('autoAssigned', '==', true)
+    );
+    const snap = await getDocs(q);
+    const unnotified = [];
+    snap.forEach(d => {
+      if (!d.data().notifiedCleaner) unnotified.push({ id: d.id, ...d.data() });
+    });
+    if (unnotified.length === 0) return;
+
+    // Build a notification section at the top of the cleaner view
+    let container = document.getElementById('cleaner-confirmations');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'cleaner-confirmations';
+      container.style.cssText = 'margin: 0 0 16px 0;';
+      const scheduleContainer = document.getElementById('schedule-container');
+      if (scheduleContainer && scheduleContainer.parentElement) {
+        scheduleContainer.parentElement.insertBefore(container, scheduleContainer);
+      } else document.body.prepend(container);
+    }
+    container.innerHTML = '';
+
+    for (const claim of unnotified) {
+      const dateLabel = new Date(claim.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+      const card = document.createElement('div');
+      card.style.cssText = `
+        background: linear-gradient(135deg, #1a3a2a, #0f2219);
+        border: 1px solid #22c55e44; border-radius: 12px;
+        padding: 14px 16px; margin-bottom: 10px;
+        display: flex; align-items: center; gap: 12px;
+        color: #fff;
+      `;
+      card.innerHTML = `
+        <span style="font-size: 24px;">🎉</span>
+        <div style="flex:1">
+          <div style="font-weight:700; font-size:15px;">Cleaning confirmed!</div>
+          <div style="color:#86efac; font-size:14px; margin-top:2px;">Unit ${claim.unit} · ${dateLabel}</div>
+        </div>
+        <button onclick="dismissCleanerConfirmation('${claim.id}', this.closest('[data-claim]'))"
+          data-claim="${claim.id}"
+          style="background:rgba(255,255,255,0.1);border:none;border-radius:6px;padding:6px 10px;color:#fff;cursor:pointer;font-size:13px;">
+          Got it ✓
+        </button>
+      `;
+      card.dataset.claim = claim.id;
+      container.appendChild(card);
+
+      // Mark as notified so it only shows once
+      try { await updateDoc(doc(db, 'claims', claim.id), { notifiedCleaner: true }); } catch(e) {}
+    }
+  } catch(e) { console.warn('showCleanerConfirmations failed:', e); }
+}
+
+window.dismissCleanerConfirmation = function(claimId, card) {
+  if (card) card.remove();
+  const container = document.getElementById('cleaner-confirmations');
+  if (container && container.children.length === 0) container.remove();
+};
 
 // Checklist state
 let clState = { unit: null, date: null, nights: 0, roomIndex: 0, checked: {}, guestRating: 0 };
