@@ -1304,19 +1304,15 @@ async function getCheckoutSlots() {
       }
     }
     if (eStatus==='checkout'||eStatus==='both') {
-      // Unit E booking: show a single Unit E slot instead of A and B separately
-      if (!checkouts.find(c=>c.unit==='E')) {
-        checkouts.push({ unit: 'E', nights: eNights, guests: eGuests, combinedE: false });
-      }
-      // Remove any A/B slots that were added from individual iCal (they're part of E)
-      const toRemove = new Set(['A','B']);
-      for (let i = checkouts.length - 1; i >= 0; i--) {
-        if (toRemove.has(checkouts[i].unit) && !checkouts[i].combinedE) {
-          // Only remove if it was an individual unit checkout that's part of Unit E
-          // Keep if it has its own independent booking
-          const indivStatus = classifyDay(icals[checkouts[i].unit]||[], day);
-          if (!indivStatus || indivStatus === 'open') checkouts.splice(i, 1);
+      if (eStatus==='both') {
+        // E checkout + checkin same day (rare back-to-back): single Unit E slot
+        if (!checkouts.find(c=>c.unit==='E')) {
+          checkouts.push({ unit: 'E', nights: eNights, guests: eGuests, combinedE: false });
         }
+      } else {
+        // E checkout only: show A and B as individual cleaning slots (stage each unit)
+        if (!checkouts.find(c=>c.unit==='A')) checkouts.push({ unit: 'A', nights: eNights, guests: guestsFor(day, 'A', eGuests), combinedE: true });
+        if (!checkouts.find(c=>c.unit==='B')) checkouts.push({ unit: 'B', nights: eNights, guests: guestsFor(day, 'B', eGuests), combinedE: true });
       }
     }
 
@@ -1410,10 +1406,18 @@ async function getFullSchedule(futureDays = 60, pastDays = 0) {
       let status = classifyDay(icals[u]||[], day);
       let nights = getNights(icals[u]||[], day);
       let guests = getGuests(icals[u]||[], day);
-      // If E is active, A and B are unavailable unless they have their own independent booking
-      // (Unit E combined bookings handle checkout/checkin as a single Unit E slot)
-      if (eActive && (u==='A'||u==='B') && (!status || status==='open')) {
-        status = 'unavailable';
+      // E combined logic for A and B:
+      if ((u==='A'||u==='B')) {
+        if (eStatus==='both') {
+          // E checkout+checkin same day: A and B show N/A (cleaning tracked under Unit E)
+          if (!status || status==='open') status = 'unavailable';
+        } else if (eStatus==='checkout') {
+          // E checkout only: A and B get the checkout status so they show as cleaning slots
+          if (!status || status==='open') { status = 'checkout'; nights = eNights; guests = eGuests; }
+        } else if (eActive && (!status || status==='open')) {
+          // E occupied (not checkout day): A and B are unavailable
+          status = 'unavailable';
+        }
       }
       unitRows.push({ unit: u, status: status || 'open', nights, guests: guestsFor(day, u, guests) });
     }
