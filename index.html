@@ -2415,8 +2415,14 @@ function renderUnitDetail(unit) {
         <input type="text" value="${room.name.replace(/"/g,'&quot;')}"
           style="font-family:\'Fraunces\',serif;font-size:1rem;font-weight:600;border:none;border-bottom:1px dashed var(--border);background:transparent;flex:1;padding:0.1rem 0;"
           onchange="renameRoom('${unit}',${ri},this.value)" />
-        <button onclick="removeRoom('${unit}',${ri})"
-          style="font-size:0.72rem;color:var(--accent);border:none;background:none;cursor:pointer;margin-left:0.75rem;">Remove room</button>
+        <div style="display:flex;align-items:center;gap:0.25rem;margin-left:0.5rem;">
+          ${ri > 1 ? `<button onclick="moveRoom('${unit}',${ri},-1)" title="Move up"
+            style="font-size:0.8rem;border:1px solid var(--border);background:var(--paper);border-radius:3px;width:24px;height:24px;cursor:pointer;line-height:1;padding:0;">↑</button>` : '<span style="width:24px;display:inline-block;"></span>'}
+          ${ri < rooms.length - 1 ? `<button onclick="moveRoom('${unit}',${ri},1)" title="Move down"
+            style="font-size:0.8rem;border:1px solid var(--border);background:var(--paper);border-radius:3px;width:24px;height:24px;cursor:pointer;line-height:1;padding:0;">↓</button>` : '<span style="width:24px;display:inline-block;"></span>'}
+          <button onclick="removeRoom('${unit}',${ri})"
+            style="font-size:0.72rem;color:var(--accent);border:none;background:none;cursor:pointer;margin-left:0.25rem;">Remove</button>
+        </div>
       </div>
 
       <!-- Photos -->
@@ -2519,6 +2525,15 @@ window.addRoom = function(unit) {
 window.removeRoom = function(unit, roomIdx) {
   if (!confirm(`Remove "${UNIT_CHECKLISTS[unit].rooms[roomIdx].name}"?`)) return;
   UNIT_CHECKLISTS[unit].rooms.splice(roomIdx, 1);
+  saveChecklistToFirestore(unit);
+  renderUnitDetail(unit);
+};
+
+window.moveRoom = function(unit, roomIdx, dir) {
+  const rooms = UNIT_CHECKLISTS[unit].rooms;
+  const newIdx = roomIdx + dir;
+  if (newIdx < 1 || newIdx >= rooms.length) return; // index 0 is "First Things First", locked
+  [rooms[roomIdx], rooms[newIdx]] = [rooms[newIdx], rooms[roomIdx]];
   saveChecklistToFirestore(unit);
   renderUnitDetail(unit);
 };
