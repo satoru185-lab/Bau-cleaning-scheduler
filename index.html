@@ -128,8 +128,7 @@ h1 span { font-style: italic; color: var(--accent); }
 .slots { padding: 0.5rem 0.9rem; display: flex; flex-direction: column; gap: 0.4rem; }
 .slot {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
   padding: 0.5rem 0.75rem;
   border-radius: 3px;
   font-size: 0.82rem;
@@ -1579,9 +1578,13 @@ function renderCleanerSchedule(slots, claims, tbdClaims, container, completedKey
           linenNote = `<div style="font-size:0.68rem;color:#8a5020;margin-top:0.2rem;">🛏 Leave out extra linens (sofa bed)</div>`;
         }
       }
-      slotEl.innerHTML = `<span class="slot-unit">Unit ${unit}</span>
-        <span class="slot-label">${nightLabel}${(isMe && !isDone) ? ` · ${t('doneBy')} ${doneBy}` : ''}</span>
-        ${rightSide}
+      const sublabel = nightLabel + ((isMe && !isDone) ? ` · ${t('doneBy')} ${doneBy}` : '');
+      slotEl.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:0.5rem;">
+          <span class="slot-unit">Unit ${unit}</span>
+          <span class="slot-label" style="flex:1;">${sublabel}</span>
+          <span style="flex-shrink:0;">${rightSide}</span>
+        </div>
         ${guestCountLine}
         ${linenNote}`;
       slotsDiv.appendChild(slotEl);
