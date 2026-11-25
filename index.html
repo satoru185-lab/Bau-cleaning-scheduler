@@ -4128,6 +4128,8 @@ function loadAdminHistory() {
         </div>
         <div style="display:flex;align-items:center;gap:0.4rem;flex-shrink:0;">
           ${paySection || '<span style="font-size:1.1rem;">✅</span>'}
+          <button onclick="adminDeleteHistoryRecord('${r._key}')" title="Delete record"
+            style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.8rem;padding:0.1rem 0.2rem;line-height:1;opacity:0.5;">✕</button>
         </div>`;
       block.appendChild(row);
     }
@@ -4135,6 +4137,15 @@ function loadAdminHistory() {
   }
   }); // end onSnapshot
 }
+
+window.adminDeleteHistoryRecord = async function(key) {
+  if (!key) return;
+  if (!confirm('Delete this cleaning record? This cannot be undone.')) return;
+  try {
+    const { doc, deleteDoc } = window._fb;
+    await deleteDoc(doc(db, 'history', key));
+  } catch(e) { alert('Could not delete: ' + e.message); }
+};
 
 window.adminMarkPaid = async function(key) {
   if (!key) return;
