@@ -1147,6 +1147,7 @@ function parseDate(s) {
 }
 
 function sameDay(a, b) {
+  if (!a || !b || typeof a.getFullYear !== 'function' || typeof b.getFullYear !== 'function') return false;
   return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
 }
 
