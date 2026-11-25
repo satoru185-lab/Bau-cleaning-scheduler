@@ -1437,9 +1437,14 @@ window._showPastSchedule = false;
 window.togglePastSchedule = function() {
   window._showPastSchedule = !window._showPastSchedule;
   const btn = document.getElementById('past-toggle-btn');
-  if (btn) btn.textContent = window._showPastSchedule ? '⬆ Hide past' : '⬆ Show past';
+  if (btn) btn.textContent = window._showPastSchedule ? '⬇ Hide past' : '⬆ Show past';
   _icalCache = null; try { localStorage.removeItem(ICAL_CACHE_KEY); } catch(e) {} // force re-fetch so getDays picks up new range
   loadCleanerSchedule();
+  // After rendering, scroll to today so past days are above (scroll up to see them)
+  setTimeout(() => {
+    const anchor = document.getElementById('today-anchor');
+    if (anchor) anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 600);
 };
 
 // ── Cleaner view ─────────────────────────────────────────
@@ -2052,7 +2057,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       ${Object.entries(STATUS_CONFIG).map(([k,v]) =>
         `<span style="font-size:0.68rem;padding:0.2rem 0.6rem;border-radius:3px;background:${v.bg};border:1px solid ${v.border};color:${v.color};">${v.label}</span>`
       ).join('')}
-      <button onclick="(function(){window._adminShowPast=!window._adminShowPast;document.getElementById('admin-schedule').dispatchEvent(new Event('rerender'));})();"
+      <button onclick="(function(){window._adminShowPast=!window._adminShowPast;document.getElementById('admin-schedule').dispatchEvent(new Event('rerender'));setTimeout(()=>{const a=document.getElementById('admin-today-anchor');if(a)a.scrollIntoView({behavior:'smooth',block:'start'});},400);})();"
         style="margin-left:auto;font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.2rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);color:var(--muted);cursor:pointer;">
         ${showPast ? '⬆ Hide past' : '⬇ Show past'}
       </button>
@@ -4072,13 +4077,22 @@ function loadAdminHistory() {
 
   // Sort newest first
   const records = [];
-  snap.forEach(d => records.push({ ...d.data(), _key: d.id }));
-  records.sort((a,b) => b.date.localeCompare(a.date));
+  snap.forEach(d => {
+    const data = d.data();
+    // Normalize date — some records may have completedAt or paidAt instead of date
+    if (!data.date && data.completedAt) data.date = data.completedAt.slice(0,10);
+    if (!data.date && data.paidAt) data.date = data.paidAt.slice(0,10);
+    if (!data.date && data.paymentRequestedAt) data.date = data.paymentRequestedAt.slice(0,10);
+    if (!data.date && data.createdAt) data.date = data.createdAt.slice(0,10);
+    if (!data.date) data.date = '0000-00-00'; // fallback so sort/slice don't crash
+    records.push({ ...data, _key: d.id });
+  });
+  records.sort((a,b) => (b.date||'').localeCompare(a.date||''));
 
   // Group by month
   const byMonth = {};
   for (const r of records) {
-    const month = r.date.slice(0,7); // YYYY-MM
+    const month = (r.date||'0000-00').slice(0,7); // YYYY-MM
     if (!byMonth[month]) byMonth[month] = [];
     byMonth[month].push(r);
   }
