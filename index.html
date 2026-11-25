@@ -2716,15 +2716,21 @@ const SCHEDULE_WINDOW_OPTIONS = [7, 14, 21, 30, 45, 60];
 async function loadCleanersList() {
   const { collection, onSnapshot } = window._fb;
   // Track payment totals per cleaner from history
-  let _payTotals = {}; // name -> { total, count }
+  let _payTotals = {}; // name -> { paid, requested, paidCount, requestedCount }
   onSnapshot(collection(db, 'history'), histSnap => {
     _payTotals = {};
     histSnap.forEach(d => {
       const r = d.data();
       if (r.cleaner && r.paymentAmount) {
-        if (!_payTotals[r.cleaner]) _payTotals[r.cleaner] = { total: 0, count: 0 };
-        _payTotals[r.cleaner].total += parseFloat(r.paymentAmount) || 0;
-        _payTotals[r.cleaner].count += 1;
+        if (!_payTotals[r.cleaner]) _payTotals[r.cleaner] = { paid: 0, requested: 0, paidCount: 0, requestedCount: 0 };
+        const amt = parseFloat(r.paymentAmount) || 0;
+        if (r.paid) {
+          _payTotals[r.cleaner].paid += amt;
+          _payTotals[r.cleaner].paidCount += 1;
+        } else {
+          _payTotals[r.cleaner].requested += amt;
+          _payTotals[r.cleaner].requestedCount += 1;
+        }
       }
     });
     renderCleanersListUI(_payTotals);
@@ -2747,9 +2753,15 @@ function renderCleanersListUI(_payTotals) {
         `<option value="${n}" ${days===n?'selected':''}>${n} days</option>`
       ).join('');
       const pay = _payTotals[data.name];
-      const payLine = pay
-        ? `<div style="margin-top:0.35rem;font-size:0.72rem;color:#2a6b4a;font-weight:600;">💵 $${pay.total.toFixed(2)} requested · ${pay.count} clean${pay.count!==1?'s':''}</div>`
-        : `<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--muted);">💵 No payment requests yet</div>`;
+      let payLine;
+      if (!pay) {
+        payLine = `<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--muted);">💵 No payments yet</div>`;
+      } else {
+        const parts = [];
+        if (pay.paid > 0) parts.push(`<span style="color:#2a6b4a;">✅ $${pay.paid.toFixed(2)} paid · ${pay.paidCount} clean${pay.paidCount!==1?'s':''}</span>`);
+        if (pay.requested > 0) parts.push(`<span style="color:#b06000;">⏳ $${pay.requested.toFixed(2)} requested · ${pay.requestedCount} clean${pay.requestedCount!==1?'s':''}</span>`);
+        payLine = `<div style="margin-top:0.35rem;font-size:0.72rem;font-weight:600;">💵 ${parts.join(' · ')}</div>`;
+      }
       const row = document.createElement('div');
       row.style.cssText = 'background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:0.85rem 1rem;margin-bottom:0.75rem;font-size:0.82rem;';
       row.innerHTML = `
