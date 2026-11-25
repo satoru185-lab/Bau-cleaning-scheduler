@@ -2310,15 +2310,45 @@ window.showAdminTab = function(tab) {
 };
 
 window.viewAsCleanerFromTab = function(name, accessLevel, scheduleDays) {
-  window._previewCleanerName = name;
-  window._previewScheduleDays = scheduleDays || 14;
-  _previewSlots = null; // force re-fetch with correct window
-  const tabs = document.querySelectorAll('#admin-tabs .tab');
-  tabs.forEach(t => { if (t.textContent.trim() === 'Preview') t.click(); });
-  setTimeout(() => {
-    const sel = document.getElementById('preview-access-select');
-    if (sel) { sel.value = accessLevel; window._doRenderPreview && window._doRenderPreview(); }
-  }, 100);
+  // Save admin session so we can return
+  window._adminUserBackup = { ...currentUser };
+  // Switch into cleaner view as that cleaner
+  currentUser = { name, role: 'cleaner', scheduleDays: scheduleDays || 14, accessLevel: accessLevel || 'basic', cashtag: '', pay: 0, ntfyTopic: '' };
+  document.getElementById('bar-name').textContent = name;
+  document.getElementById('bar-role').textContent = ` · cleaner`;
+  document.getElementById('admin-view').style.display = 'none';
+  document.getElementById('cleaner-view').style.display = 'block';
+  switchTab('home');
+  loadCleanerSchedule();
+  loadMyHistory();
+  // Show "Back to Admin" floating banner
+  let banner = document.getElementById('impersonate-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'impersonate-banner';
+    banner.style.cssText = 'position:fixed;bottom:70px;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;font-family:"DM Mono",monospace;font-size:0.72rem;padding:0.4rem 0.9rem;border-radius:20px;z-index:9999;display:flex;align-items:center;gap:0.6rem;box-shadow:0 2px 8px rgba(0,0,0,0.3);white-space:nowrap;';
+    banner.innerHTML = `<span>👁 Viewing as <strong>${name}</strong></span><button onclick="exitCleanerPreview()" style="background:#fff;color:#1a1a1a;border:none;border-radius:10px;padding:0.15rem 0.5rem;font-family:'DM Mono',monospace;font-size:0.7rem;cursor:pointer;font-weight:600;">← Back to Admin</button>`;
+    document.body.appendChild(banner);
+  } else {
+    banner.style.display = 'flex';
+    banner.querySelector('span').innerHTML = `👁 Viewing as <strong>${name}</strong>`;
+  }
+};
+
+window.exitCleanerPreview = function() {
+  if (!window._adminUserBackup) return;
+  currentUser = window._adminUserBackup;
+  window._adminUserBackup = null;
+  document.getElementById('bar-name').textContent = currentUser.name;
+  document.getElementById('bar-role').textContent = ` · Admin`;
+  document.getElementById('cleaner-view').style.display = 'none';
+  document.getElementById('admin-view').style.display = 'block';
+  const banner = document.getElementById('impersonate-banner');
+  if (banner) banner.style.display = 'none';
+  // Return to Cleaners tab
+  document.querySelectorAll('#admin-tabs .tab').forEach(t => {
+    if (t.dataset.tab === 'cleaners' || t.textContent.trim() === 'Cleaners') t.click();
+  });
 };
 
 // ── Admin — Cleaner Preview ────────────────────────────────
