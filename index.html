@@ -2757,9 +2757,33 @@ function renderCleanersListUI(_payTotals) {
       ).join('');
       const pay = _payTotals[data.name];
       const cleanerKey = data.name.replace(/\s+/g,'_');
+      const addPayForm = `
+        <div id="add-pay-form-${cleanerKey}" style="display:none;margin-top:0.5rem;padding:0.5rem;background:var(--paper);border:1px solid var(--green);border-radius:4px;">
+          <div style="font-size:0.7rem;font-weight:600;color:var(--green);margin-bottom:0.4rem;">+ Add past payment</div>
+          <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+            <input type="date" id="ap-date-${cleanerKey}" style="font-size:0.72rem;padding:0.2rem 0.4rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--ink);font-family:'DM Mono',monospace;" />
+            <select id="ap-unit-${cleanerKey}" style="font-size:0.72rem;padding:0.2rem 0.4rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--ink);font-family:'DM Mono',monospace;">
+              <option value="">Unit…</option>
+              <option>A</option><option>B</option><option>C</option><option>E</option><option>F</option><option>multiple</option>
+            </select>
+            <input type="number" id="ap-amt-${cleanerKey}" placeholder="$0.00" min="0" step="0.01" inputmode="decimal"
+              style="font-size:0.72rem;padding:0.2rem 0.4rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--ink);font-family:'DM Mono',monospace;width:70px;" />
+            <input type="text" id="ap-note-${cleanerKey}" placeholder="Note (optional)"
+              style="font-size:0.72rem;padding:0.2rem 0.4rem;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--ink);font-family:'DM Mono',monospace;flex:1;min-width:100px;" />
+            <button onclick="adminAddPayment('${data.name}','${cleanerKey}')"
+              style="font-size:0.72rem;padding:0.2rem 0.6rem;border:1px solid var(--green);border-radius:3px;background:var(--green);color:#fff;cursor:pointer;font-family:'DM Mono',monospace;">Save</button>
+            <button onclick="document.getElementById('add-pay-form-${cleanerKey}').style.display='none'"
+              style="font-size:0.72rem;padding:0.2rem 0.5rem;border:1px solid var(--border);border-radius:3px;background:transparent;color:var(--muted);cursor:pointer;">✕</button>
+          </div>
+        </div>`;
       let payLine;
       if (!pay) {
-        payLine = `<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--muted);">💵 No payments yet</div>`;
+        payLine = `<div style="margin-top:0.35rem;font-size:0.72rem;">
+          <span style="color:var(--muted);">💵 No payments yet</span>
+          <button onclick="document.getElementById('add-pay-form-${cleanerKey}').style.display='block'"
+            style="margin-left:0.5rem;font-size:0.65rem;padding:0.1rem 0.4rem;border:1px solid var(--green);border-radius:3px;background:transparent;color:var(--green);cursor:pointer;font-family:'DM Mono',monospace;">+ Add</button>
+          ${addPayForm}
+        </div>`;
       } else {
         const parts = [];
         if (pay.paid > 0) parts.push(`<span style="color:#2a6b4a;">✅ $${pay.paid.toFixed(2)} paid · ${pay.paidCount} clean${pay.paidCount!==1?'s':''}</span>`);
@@ -2782,6 +2806,9 @@ function renderCleanersListUI(_payTotals) {
             </button>
             <div style="display:none;margin-top:0.4rem;padding:0.4rem 0.5rem;background:var(--bg);border-radius:4px;border:1px solid var(--border);">
               ${histRows || '<span style="color:var(--muted);font-size:0.7rem;">No records</span>'}
+              <button onclick="document.getElementById('add-pay-form-${cleanerKey}').style.display='block'"
+                style="margin-top:0.4rem;font-size:0.65rem;padding:0.15rem 0.5rem;border:1px solid var(--green);border-radius:3px;background:transparent;color:var(--green);cursor:pointer;font-family:'DM Mono',monospace;">+ Add past payment</button>
+              ${addPayForm}
             </div>
           </div>`;
       }
@@ -2894,6 +2921,33 @@ window.setCleanerPhone = async function(id, phone) {
 window.removeCleaner = async function(id) {
   const { doc, deleteDoc } = window._fb;
   await deleteDoc(doc(db, 'cleaners', id));
+};
+
+window.adminAddPayment = async function(cleanerName, cleanerKey) {
+  const date  = document.getElementById(`ap-date-${cleanerKey}`).value;
+  const unit  = document.getElementById(`ap-unit-${cleanerKey}`).value;
+  const amt   = parseFloat(document.getElementById(`ap-amt-${cleanerKey}`).value);
+  const note  = document.getElementById(`ap-note-${cleanerKey}`).value.trim();
+  if (!date) { alert('Please enter a date.'); return; }
+  if (!unit) { alert('Please select a unit.'); return; }
+  if (!amt || amt <= 0) { alert('Please enter a valid amount.'); return; }
+  const { collection, addDoc } = window._fb;
+  try {
+    await addDoc(collection(db, 'history'), {
+      cleaner: cleanerName,
+      unit,
+      date,
+      paymentAmount: amt,
+      paymentRequested: true,
+      paymentRequestedAt: new Date(date).toISOString(),
+      paid: true,
+      paidAt: new Date(date).toISOString(),
+      note: note || `Manual entry — Unit ${unit}`,
+      source: 'admin_manual',
+      createdAt: new Date().toISOString()
+    });
+    document.getElementById(`add-pay-form-${cleanerKey}`).style.display = 'none';
+  } catch(e) { alert('Could not save: ' + e.message); }
 };
 
 // ── Bottom nav / tabs ─────────────────────────────────────
