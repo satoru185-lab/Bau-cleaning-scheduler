@@ -4078,7 +4078,8 @@ function loadAdminHistory() {
       // Payment status for admin
       let paySection = '';
       if (r.paid) {
-        paySection = `<span style="font-size:0.68rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.2rem 0.5rem;">✅ Paid</span>`;
+        const paidAmt = r.paymentAmount ? ` $${parseFloat(r.paymentAmount).toFixed(2)}` : '';
+        paySection = `<span style="font-size:0.68rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.2rem 0.5rem;">✅ Paid${paidAmt}</span>`;
       } else if (r.paymentRequested) {
         const reqAmt = r.paymentAmount ? ` $${parseFloat(r.paymentAmount).toFixed(2)}` : '';
         paySection = `<div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
@@ -4267,7 +4268,8 @@ function buildHistoryRow(r, acc) {
   } else {
     let payBadge = '';
     if (r.paid) {
-      payBadge = `<span style="font-size:0.7rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.2rem 0.5rem;white-space:nowrap;">✅ Paid</span>`;
+      const paidAmt2 = r.paymentAmount ? ` $${parseFloat(r.paymentAmount).toFixed(2)}` : '';
+      payBadge = `<span style="font-size:0.7rem;color:#2a6b4a;background:#e8f8ed;border:1px solid #a0d8b0;border-radius:3px;padding:0.2rem 0.5rem;white-space:nowrap;">✅ Paid${paidAmt2}</span>`;
     } else if (r.paymentRequested) {
       payBadge = `<span style="font-size:0.7rem;color:#b07d2a;background:#fff8e1;border:1px solid #f0c040;border-radius:3px;padding:0.2rem 0.5rem;white-space:nowrap;">💵 Requested</span>`;
     }
