@@ -919,6 +919,7 @@ async function initFirebase(config) {
   const app = initializeApp(config);
   db = getFirestore(app);
   window._fb = { doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, collection, onSnapshot, query, where, orderBy, limit, addDoc };
+  window._db = db;
   return true;
 }
 
