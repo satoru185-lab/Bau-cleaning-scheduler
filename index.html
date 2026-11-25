@@ -2713,8 +2713,29 @@ const SCHEDULE_WINDOW_OPTIONS = [7, 14, 21, 30, 45, 60];
 
 async function loadCleanersList() {
   const { collection, onSnapshot } = window._fb;
+  // Track payment totals per cleaner from history
+  let _payTotals = {}; // name -> { total, count }
+  onSnapshot(collection(db, 'history'), histSnap => {
+    _payTotals = {};
+    histSnap.forEach(d => {
+      const r = d.data();
+      if (r.cleaner && r.paymentAmount) {
+        if (!_payTotals[r.cleaner]) _payTotals[r.cleaner] = { total: 0, count: 0 };
+        _payTotals[r.cleaner].total += parseFloat(r.paymentAmount) || 0;
+        _payTotals[r.cleaner].count += 1;
+      }
+    });
+    renderCleanersListUI(_payTotals);
+  });
   onSnapshot(collection(db, 'cleaners'), snap => {
-    const list = document.getElementById('cleaners-list');
+    window._cleanersSnap = snap;
+    renderCleanersListUI(_payTotals);
+  });
+}
+function renderCleanersListUI(_payTotals) {
+  const snap = window._cleanersSnap;
+  if (!snap) return;
+  const list = document.getElementById('cleaners-list');
     if (snap.empty) { list.innerHTML = '<span style="color:var(--muted);font-size:0.8rem;">No cleaners added yet.</span>'; return; }
     list.innerHTML = '';
     snap.forEach(d => {
@@ -2723,6 +2744,10 @@ async function loadCleanersList() {
       const opts = SCHEDULE_WINDOW_OPTIONS.map(n =>
         `<option value="${n}" ${days===n?'selected':''}>${n} days</option>`
       ).join('');
+      const pay = _payTotals[data.name];
+      const payLine = pay
+        ? `<div style="margin-top:0.35rem;font-size:0.72rem;color:#2a6b4a;font-weight:600;">💵 $${pay.total.toFixed(2)} requested · ${pay.count} clean${pay.count!==1?'s':''}</div>`
+        : `<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--muted);">💵 No payment requests yet</div>`;
       const row = document.createElement('div');
       row.style.cssText = 'background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:0.85rem 1rem;margin-bottom:0.75rem;font-size:0.82rem;';
       row.innerHTML = `
@@ -2765,10 +2790,10 @@ async function loadCleanersList() {
             onchange="setCleanerCashtag('${d.id}', this.value)"
             style="font-family:'DM Mono',monospace;font-size:0.72rem;border:1px solid var(--border);border-radius:3px;padding:0.2rem 0.4rem;background:var(--bg);flex:1;min-width:0;" />
         </div>
-        <div style="margin-top:0.3rem;font-size:0.68rem;color:var(--muted);">PIN: ${data.pin||'—'}</div>`;
+        <div style="margin-top:0.3rem;font-size:0.68rem;color:var(--muted);">PIN: ${data.pin||'—'}</div>
+        ${payLine}`;
       list.appendChild(row);
     });
-  });
 }
 
 window.setCleanerWindow = async function(id, days) {
