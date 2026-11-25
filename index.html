@@ -4293,17 +4293,40 @@ function renderHistoryTab() {
   }
   wrap.innerHTML = '';
 
-  // Earnings summary banner
+  // Earnings summary banner — totals + per-year breakdown
   const doneRows = _allHistoryRows.filter(r => r.status === 'done');
   const totalPaid = doneRows.reduce((s,r) => s + (r.paid && r.paymentAmount ? parseFloat(r.paymentAmount) : 0), 0);
   const totalPending = doneRows.reduce((s,r) => s + (!r.paid && r.paymentRequested && r.paymentAmount ? parseFloat(r.paymentAmount) : 0), 0);
   const totalCleans = doneRows.length;
+
+  // Group by year
+  const byYear = {};
+  for (const r of doneRows) {
+    const yr = (r.date || '').slice(0, 4);
+    if (!yr) continue;
+    if (!byYear[yr]) byYear[yr] = { paid: 0, cleans: 0 };
+    if (r.paid && r.paymentAmount) byYear[yr].paid += parseFloat(r.paymentAmount);
+    byYear[yr].cleans += 1;
+  }
+  const years = Object.keys(byYear).sort().reverse();
+
   const summary = document.createElement('div');
   summary.style.cssText = 'background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:0.75rem 1rem;margin-bottom:1rem;';
-  let earningsHtml = `<div style="font-size:0.7rem;font-weight:600;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:0.4rem;">Total Earnings</div>`;
-  if (totalPaid > 0) earningsHtml += `<div style="font-size:1.3rem;font-weight:700;color:#2a6b4a;">$${totalPaid.toFixed(2)} <span style="font-size:0.75rem;font-weight:400;color:var(--muted);">paid · ${totalCleans} clean${totalCleans!==1?'s':''}</span></div>`;
+  let earningsHtml = `<div style="font-size:0.7rem;font-weight:600;color:var(--muted);letter-spacing:0.05em;text-transform:uppercase;margin-bottom:0.5rem;">Earnings</div>`;
+  if (totalPaid > 0) earningsHtml += `<div style="font-size:1.3rem;font-weight:700;color:#2a6b4a;">$${totalPaid.toFixed(2)} <span style="font-size:0.75rem;font-weight:400;color:var(--muted);">total · ${totalCleans} clean${totalCleans!==1?'s':''}</span></div>`;
   else earningsHtml += `<div style="font-size:1.1rem;font-weight:700;color:var(--ink);">${totalCleans} clean${totalCleans!==1?'s':''} recorded</div>`;
   if (totalPending > 0) earningsHtml += `<div style="font-size:0.75rem;color:#b06000;margin-top:0.2rem;">⏳ $${totalPending.toFixed(2)} pending payment</div>`;
+  if (years.length > 1) {
+    earningsHtml += `<div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;display:flex;flex-direction:column;gap:0.2rem;">`;
+    for (const yr of years) {
+      const y = byYear[yr];
+      earningsHtml += `<div style="display:flex;justify-content:space-between;font-size:0.75rem;">
+        <span style="color:var(--muted);">${yr}</span>
+        <span style="font-weight:600;color:#2a6b4a;">$${y.paid.toFixed(2)} <span style="font-weight:400;color:var(--muted);">· ${y.cleans} clean${y.cleans!==1?'s':''}</span></span>
+      </div>`;
+    }
+    earningsHtml += `</div>`;
+  }
   summary.innerHTML = earningsHtml;
   wrap.appendChild(summary);
 
