@@ -2716,14 +2716,15 @@ const SCHEDULE_WINDOW_OPTIONS = [7, 14, 21, 30, 45, 60];
 async function loadCleanersList() {
   const { collection, onSnapshot } = window._fb;
   // Track payment totals per cleaner from history
-  let _payTotals = {}; // name -> { paid, requested, paidCount, requestedCount }
+  let _payTotals = {}; // name -> { paid, requested, paidCount, requestedCount, items: [{date,unit,amount,isPaid}] }
   onSnapshot(collection(db, 'history'), histSnap => {
     _payTotals = {};
     histSnap.forEach(d => {
       const r = d.data();
       if (r.cleaner && r.paymentAmount) {
-        if (!_payTotals[r.cleaner]) _payTotals[r.cleaner] = { paid: 0, requested: 0, paidCount: 0, requestedCount: 0 };
+        if (!_payTotals[r.cleaner]) _payTotals[r.cleaner] = { paid: 0, requested: 0, paidCount: 0, requestedCount: 0, items: [] };
         const amt = parseFloat(r.paymentAmount) || 0;
+        _payTotals[r.cleaner].items.push({ date: r.date || r.completedAt || r.paymentRequestedAt || '', unit: r.unit || '?', amount: amt, isPaid: !!r.paid });
         if (r.paid) {
           _payTotals[r.cleaner].paid += amt;
           _payTotals[r.cleaner].paidCount += 1;
@@ -2733,6 +2734,8 @@ async function loadCleanersList() {
         }
       }
     });
+    // Sort items newest first within each cleaner
+    Object.values(_payTotals).forEach(p => p.items.sort((a,b) => (b.date||'').localeCompare(a.date||'')));
     renderCleanersListUI(_payTotals);
   });
   onSnapshot(collection(db, 'cleaners'), snap => {
@@ -2753,6 +2756,7 @@ function renderCleanersListUI(_payTotals) {
         `<option value="${n}" ${days===n?'selected':''}>${n} days</option>`
       ).join('');
       const pay = _payTotals[data.name];
+      const cleanerKey = data.name.replace(/\s+/g,'_');
       let payLine;
       if (!pay) {
         payLine = `<div style="margin-top:0.35rem;font-size:0.72rem;color:var(--muted);">💵 No payments yet</div>`;
@@ -2760,7 +2764,26 @@ function renderCleanersListUI(_payTotals) {
         const parts = [];
         if (pay.paid > 0) parts.push(`<span style="color:#2a6b4a;">✅ $${pay.paid.toFixed(2)} paid · ${pay.paidCount} clean${pay.paidCount!==1?'s':''}</span>`);
         if (pay.requested > 0) parts.push(`<span style="color:#b06000;">⏳ $${pay.requested.toFixed(2)} requested · ${pay.requestedCount} clean${pay.requestedCount!==1?'s':''}</span>`);
-        payLine = `<div style="margin-top:0.35rem;font-size:0.72rem;font-weight:600;">💵 ${parts.join(' · ')}</div>`;
+        const histRows = pay.items.map(it => {
+          const dateStr = it.date ? it.date.slice(0,10) : '—';
+          const statusIcon = it.isPaid ? '✅' : '⏳';
+          const statusColor = it.isPaid ? '#2a6b4a' : '#b06000';
+          return `<div style="display:flex;justify-content:space-between;padding:0.2rem 0;border-bottom:1px solid var(--border);font-size:0.7rem;">
+            <span style="color:var(--muted);">${dateStr} · Unit ${it.unit}</span>
+            <span style="font-weight:600;color:${statusColor};">${statusIcon} $${it.amount.toFixed(2)}</span>
+          </div>`;
+        }).join('');
+        payLine = `
+          <div style="margin-top:0.35rem;">
+            <button onclick="(function(el){el.nextElementSibling.style.display=el.nextElementSibling.style.display==='none'?'block':'none';el.querySelector('.pay-arrow').textContent=el.nextElementSibling.style.display==='none'?'▸':'▾';})(this)"
+              style="background:none;border:none;padding:0;cursor:pointer;font-size:0.72rem;font-weight:600;display:flex;align-items:center;gap:0.3rem;font-family:'DM Mono',monospace;">
+              <span class="pay-arrow">▸</span>
+              💵 ${parts.join(' · ')}
+            </button>
+            <div style="display:none;margin-top:0.4rem;padding:0.4rem 0.5rem;background:var(--bg);border-radius:4px;border:1px solid var(--border);">
+              ${histRows || '<span style="color:var(--muted);font-size:0.7rem;">No records</span>'}
+            </div>
+          </div>`;
       }
       const row = document.createElement('div');
       row.style.cssText = 'background:var(--paper);border:1px solid var(--border);border-radius:6px;padding:0.85rem 1rem;margin-bottom:0.75rem;font-size:0.82rem;';
