@@ -4138,6 +4138,15 @@ function loadAdminHistory() {
   }); // end onSnapshot
 }
 
+window.deleteStaleClaim = async function(key) {
+  if (!confirm('Remove this stale claim?')) return;
+  try {
+    const { doc, deleteDoc } = window._fb;
+    await deleteDoc(doc(db, 'claims', key));
+    loadMyHistory();
+  } catch(e) { alert('Could not delete: ' + e.message); }
+};
+
 window.adminDeleteHistoryRecord = async function(key) {
   if (!key) return;
   if (!confirm('Delete this cleaning record? This cannot be undone.')) return;
@@ -4299,12 +4308,17 @@ function buildHistoryRow(r, acc) {
       ? `<button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--green);border-radius:3px;background:#f0faf4;color:#2a6b4a;cursor:pointer;touch-action:manipulation;"
           onclick="markCleanDone('${r.key}','${r.unit}','${r.date}','${r.nights}')">✓ Mark done</button>`
       : '';
+    const deleteClaimBtn = r.isPast
+      ? `<button onclick="deleteStaleClaim('${r.key}')" title="Remove stale claim"
+          style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.8rem;padding:0.1rem 0.2rem;opacity:0.5;">✕</button>`
+      : '';
     row.innerHTML = `<span>${dateStr} — Unit ${r.unit}${nightLabel}</span>
       <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
         <span style="color:var(--accent);font-size:0.72rem;">${t('inProgress')}</span>
         <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;"
           onclick="openChecklist('${r.unit}','${r.date}','${r.nights}')">${t('resume')}</button>
         ${markDoneBtn}
+        ${deleteClaimBtn}
       </div>`;
   } else {
     let payBadge = '';
