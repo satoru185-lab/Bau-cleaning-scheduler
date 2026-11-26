@@ -4256,8 +4256,15 @@ function loadMyHistory() {
     // Live listener on history — fires immediately and on every change (payment status, paid, etc.)
     _myHistoryUnsub = onSnapshot(collection(db, 'history'), histSnap => {
       const completed = {};
+      // Build a set of "date_unit" combos that are already in history for this cleaner
+      const completedSlots = new Set();
       histSnap.forEach(d => {
-        if (d.data().cleaner === currentUser.name) completed[d.id] = d.data();
+        const data = d.data();
+        if (data.cleaner === currentUser.name) {
+          completed[d.id] = data;
+          // Track by date+unit so we can suppress claims regardless of doc ID
+          if (data.date && data.unit) completedSlots.add(`${data.date}_${data.unit}`);
+        }
       });
 
       const today = new Date(); today.setHours(0,0,0,0);
@@ -4266,6 +4273,7 @@ function loadMyHistory() {
       // Completed history entries
       _completedCleans = [];
       for (const [key, r] of Object.entries(completed)) {
+        if (!r.date || !r.unit) continue; // skip malformed entries
         rows.push({ date: r.date, unit: r.unit, nights: r.nights || 0, status: 'done', key,
           paymentRequested: !!r.paymentRequested, paid: !!r.paid, paymentAmount: r.paymentAmount || null });
         _completedCleans.push({ date: r.date, unit: r.unit, nights: r.nights || 0, key,
@@ -4274,8 +4282,10 @@ function loadMyHistory() {
       _completedCleans.sort((a,b) => b.date.localeCompare(a.date));
 
       // In-progress claims (past or today, not yet in history)
+      // Skip if a history record already exists for this date+unit combo (even with different doc ID)
       for (const [key, c] of Object.entries(myClaims)) {
-        if (completed[key]) continue;
+        if (completed[key]) continue; // exact doc ID match
+        if (c.date && c.unit && completedSlots.has(`${c.date}_${c.unit}`)) continue; // date+unit match
         const claimDate = new Date(c.date + 'T12:00:00');
         if (claimDate <= today) {
           rows.push({ date: c.date, unit: c.unit, nights: 0, status: 'in-progress', key,
