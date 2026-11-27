@@ -1,0 +1,33 @@
+name: Morning cleaner reminders
+
+on:
+  push:
+    # Test runs while this is on its branch: sends a TEST prompt to Satoru only.
+    branches: [morning-reminders]
+  schedule:
+    # 9 AM ET is 13:00 UTC in summer and 14:00 UTC in winter.
+    # Both run; the script only sends on the one that is 9 AM ET today.
+    - cron: '5 13 * * *'
+    - cron: '5 14 * * *'
+  workflow_dispatch:
+    inputs:
+      test_date:
+        description: 'Send a TEST prompt now for this date (YYYY-MM-DD, blank = today)'
+        required: false
+        default: ''
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Send morning reminder prompts to Satoru
+        run: node morning-reminders.mjs
+        working-directory: scripts
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          TEST_MODE: ${{ github.event_name != 'schedule' }}
+          TEST_DATE: ${{ github.event.inputs.test_date || (github.event_name == 'push' && '2026-11-28') || '' }}
