@@ -1014,6 +1014,7 @@ window.login = async function() {
 
 window.logout = function() {
   currentUser = null;
+  window._cleanersLoaded = false; // reset so Cleaners tab reloads on next login
   try { localStorage.removeItem('savedUser'); } catch(e) {}
   dismissCalendarPrompt();
   document.getElementById('user-bar').style.display = 'none';
@@ -1046,7 +1047,7 @@ function showApp() {
     // Default to Schedule tab on login
     document.getElementById('admin-activity').style.display = 'none';
     document.getElementById('admin-overview').style.display = 'block';
-    afterReady(() => { loadAdminSchedule(); loadAdminActivity(); loadCleanersList(); });
+    afterReady(() => { loadAdminSchedule(); }); // activity + cleaners load lazily on tab switch
   } else {
     document.getElementById('cleaner-view').style.display = 'block';
     document.getElementById('admin-view').style.display = 'none';
@@ -1207,7 +1208,7 @@ function getGuests(events, day) {
 let _icalCache = null;
 let _icalErrors = {};
 const ICAL_CACHE_KEY = 'bauICal_v1';
-const ICAL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const ICAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 function _loadICalsFromStorage() {
   try {
@@ -1892,8 +1893,13 @@ async function loadAdminSchedule() {
   let adminCompletedKeys = new Set();
   let adminStagedKeys = new Set();
 
+  let _reRenderTimer = null;
   function reRenderAdmin() {
-    renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys, adminStagedKeys, adminHistoryNights);
+    // Debounce: multiple simultaneous snapshot fires collapse into one render
+    clearTimeout(_reRenderTimer);
+    _reRenderTimer = setTimeout(() => {
+      renderAdminSchedule(adminFullSlots, adminSlots, latestAdminClaims, latestAdminTbdClaims, container, adminCompletedKeys, adminStagedKeys, adminHistoryNights);
+    }, 80);
   }
 
   // "Show past" toggle fires a custom event on the container
@@ -2311,6 +2317,7 @@ window.showAdminTab = function(tab) {
   if (tab === 'units') renderUnitCards();
   if (tab === 'history') loadAdminHistory();
   if (tab === 'activity') loadAdminActivity();
+  if (tab === 'cleaners' && !window._cleanersLoaded) { window._cleanersLoaded = true; loadCleanersList(); }
   if (tab === 'preview') window.renderPreviewSchedule();
 };
 
