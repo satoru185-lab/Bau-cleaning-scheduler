@@ -1113,8 +1113,14 @@ const WORKER = 'https://green-poetry-6240.satoru185.workers.dev/';
 const UNITS = ['A','B','C','F','E'];
 
 async function fetchICal(unit) {
-  const res = await fetch(`${WORKER}?unit=${unit}&_=${Date.now()}`, { cache: 'no-store' });
-  return res.text();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout per unit
+  try {
+    const res = await fetch(`${WORKER}?unit=${unit}&_=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
+    return res.text();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function parseICal(text) {
@@ -1210,12 +1216,12 @@ let _icalErrors = {};
 const ICAL_CACHE_KEY = 'bauICal_v1';
 const ICAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
-function _loadICalsFromStorage() {
+function _loadICalsFromStorage(ignoreExpiry = false) {
   try {
     const raw = localStorage.getItem(ICAL_CACHE_KEY);
     if (!raw) return null;
     const { ts, data } = JSON.parse(raw);
-    if (Date.now() - ts > ICAL_CACHE_TTL) return null; // expired
+    if (!ignoreExpiry && Date.now() - ts > ICAL_CACHE_TTL) return null; // expired
     return data;
   } catch(e) { return null; }
 }
@@ -1251,12 +1257,22 @@ async function fetchAllICals() {
       icals[u] = [];
     }
   }));
-  _icalCache = icals;
-  _saveICalsToStorage(icals);
-  // Warn in console so we can diagnose
+  // If all units failed, fall back to stale cache rather than showing blank schedule
   const failed = Object.keys(_icalErrors);
+  const allFailed = failed.length === UNITS.length;
+  if (allFailed) {
+    const stale = _loadICalsFromStorage(true); // ignoreExpiry
+    if (stale) {
+      console.warn('iCal fetch failed for all units — using stale cache');
+      _icalCache = stale;
+      return stale;
+    }
+  }
+  // If some succeeded, save those; keep empty arrays for failed units
   if (failed.length) console.warn('iCal fetch failed for units:', _icalErrors);
   else console.log('iCal loaded OK — events per unit:', Object.fromEntries(UNITS.map(u => [u, icals[u].length])));
+  _icalCache = icals;
+  _saveICalsToStorage(icals);
   return icals;
 }
 
