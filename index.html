@@ -1216,7 +1216,7 @@ function getGuests(events, day) {
 let _icalCache = null;
 let _icalErrors = {};
 const ICAL_CACHE_KEY = 'bauICal_v2';
-const ICAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const ICAL_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours — stale fallback persists much longer
 
 function _loadICalsFromStorage(ignoreExpiry = false) {
   try {
@@ -1263,26 +1263,23 @@ async function fetchAllICals() {
       icals[u] = [];
     }
   }));
-  // Fall back to stale cache if: all fetches failed, OR all booking units returned 0 events
-  // (the Worker may return valid but empty iCal when it's throttled or misconfigured)
-  const failed = Object.keys(_icalErrors);
-  const allFailed = failed.length === UNITS.length;
+  // For any unit that returned 0 events (failed or empty), patch in stale data for that unit
+  // This way a partial Worker failure never blanks out working units
   const bookingUnits = ['A','B','C','F'];
-  const totalEvents = bookingUnits.reduce((n, u) => n + (icals[u]||[]).length, 0);
-  const looksBlank = totalEvents === 0; // all booking units have 0 events = suspicious
-  if (allFailed || looksBlank) {
-    const stale = _loadICalsFromStorage(true); // ignoreExpiry
+  const emptyUnits = UNITS.filter(u => !(icals[u]||[]).length);
+  if (emptyUnits.length > 0) {
+    const stale = _loadICalsFromStorage(true); // ignoreExpiry, may be null
     if (stale) {
-      const staleEvents = bookingUnits.reduce((n, u) => n + (stale[u]||[]).length, 0);
-      if (staleEvents > 0) {
-        console.warn('iCal returned blank data — using stale cache (errors:', _icalErrors, ')');
-        _icalCache = stale;
-        return stale;
+      for (const u of emptyUnits) {
+        if ((stale[u]||[]).length > 0) {
+          console.warn(`iCal unit ${u} returned empty — using stale data`);
+          icals[u] = stale[u];
+        }
       }
     }
   }
-  // If some succeeded, save those; keep empty arrays for failed units
-  if (failed.length) console.warn('iCal fetch failed for units:', _icalErrors);
+  const failed = Object.keys(_icalErrors);
+  if (failed.length) console.warn('iCal fetch issues for units:', _icalErrors);
   else console.log('iCal loaded OK — events per unit:', Object.fromEntries(UNITS.map(u => [u, icals[u].length])));
   _icalCache = icals;
   _saveICalsToStorage(icals);
