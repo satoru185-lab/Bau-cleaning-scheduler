@@ -1215,7 +1215,7 @@ function getGuests(events, day) {
 // Shared iCal cache — in-memory (per session) + localStorage (5-min TTL across opens)
 let _icalCache = null;
 let _icalErrors = {};
-const ICAL_CACHE_KEY = 'bauICal_v1';
+const ICAL_CACHE_KEY = 'bauICal_v2';
 const ICAL_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 function _loadICalsFromStorage(ignoreExpiry = false) {
