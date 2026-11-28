@@ -1114,12 +1114,29 @@ function resumeChecklistFromSave(saved) {
 const WORKER = 'https://green-poetry-6240.satoru185.workers.dev/';
 const UNITS = ['A','B','C','F','E'];
 
-async function fetchICal(unit) {
+async function fetchICal(unit, attempt = 1) {
+  const timeout = attempt === 1 ? 10000 : 15000; // 10s first try, 15s retry
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout per unit
+  const timer = setTimeout(() => controller.abort(), timeout);
   try {
     const res = await fetch(`${WORKER}?unit=${unit}&_=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
-    return res.text();
+    const text = await res.text();
+    // If response looks empty or too short, retry once
+    if ((!text || text.trim().length < 20) && attempt === 1) {
+      console.warn(`iCal unit ${unit} returned short response (attempt 1), retrying...`);
+      clearTimeout(timer);
+      await new Promise(r => setTimeout(r, 1500)); // wait 1.5s before retry
+      return fetchICal(unit, 2);
+    }
+    return text;
+  } catch(e) {
+    clearTimeout(timer);
+    if (attempt === 1) {
+      console.warn(`iCal unit ${unit} fetch failed (attempt 1): ${e.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+      return fetchICal(unit, 2);
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
@@ -1249,20 +1266,23 @@ async function fetchAllICals() {
   }
   const icals = {};
   _icalErrors = {};
-  await Promise.all(UNITS.map(async u => {
+  // Fetch units with a small stagger to avoid hitting Airbnb simultaneously
+  for (const u of UNITS) {
     try {
-      const text = await fetchICal(u);
+      const text = await fetchICal(u); // fetchICal already retries once internally
       if (!text || text.trim().length < 20) {
-        _icalErrors[u] = 'empty response';
+        _icalErrors[u] = 'empty response after retry';
         icals[u] = [];
       } else {
         icals[u] = parseICal(text);
       }
     } catch(e) {
-      _icalErrors[u] = e.message || 'fetch failed';
+      _icalErrors[u] = e.message || 'fetch failed after retry';
       icals[u] = [];
     }
-  }));
+    // Small gap between units to reduce simultaneous load on Airbnb/Worker
+    await new Promise(r => setTimeout(r, 300));
+  }
   // For any unit that returned 0 events (failed or empty), patch in stale data for that unit
   // This way a partial Worker failure never blanks out working units
   const bookingUnits = ['A','B','C','F'];
