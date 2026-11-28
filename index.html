@@ -3674,30 +3674,37 @@ async function showClStagingHint(unit, date) {
     const checkinTime = checkinTimes[ciKey] || DEFAULT_CHECKIN;
 
     if (hasCheckin) {
-      // Build guest/linen reminder based on unit + guest count
-      let linenReminder = '';
-      if (guests >= 3) {
-        if (unit === 'C') {
-          linenReminder = `<div style="margin-top:0.5rem;padding:0.5rem 0.65rem;background:#fff8e1;border:1px solid #f0c040;border-radius:5px;font-size:0.82rem;">
-            🛏️ <strong>${guests} guests</strong> — please leave <strong>extra linens for the sofa bed</strong>
-          </div>`;
-        } else if (unit === 'A' || unit === 'F') {
-          linenReminder = `<div style="margin-top:0.5rem;padding:0.5rem 0.65rem;background:#fff8e1;border:1px solid #f0c040;border-radius:5px;font-size:0.82rem;">
-            🛏️ <strong>${guests} guests</strong> — please set up the <strong>air mattress</strong> and leave <strong>extra linens</strong>
-          </div>`;
-        }
-      }
+      // Big headline: unit + guest count + time
+      const guestCount = guests
+        ? `<span style="font-size:1.1rem;font-weight:700;">👥 ${guests} guest${guests!==1?'s':''}</span>`
+        : '';
+      const headline = `
+        <div style="font-size:1rem;font-weight:700;margin-bottom:0.3rem;">📋 Unit ${unit} — Check-in today</div>
+        <div style="font-size:0.95rem;margin-bottom:0.1rem;">
+          ${guestCount}${guests ? ' &nbsp;·&nbsp; ' : ''}🕐 Check-in at <strong>${checkinTime}</strong>
+        </div>`;
 
-      const guestLine = guests
-        ? `<div style="margin-top:0.3rem;font-size:0.82rem;">👥 <strong>${guests} guest${guests!==1?'s':''}</strong> checking in at <strong>${checkinTime}</strong></div>`
-        : `<div style="margin-top:0.3rem;font-size:0.82rem;">🕐 Check-in at <strong>${checkinTime}</strong></div>`;
+      // Extra linen + towel reminder for 3+ guests in A, C, F
+      let linenReminder = '';
+      if (guests >= 3 && (unit === 'A' || unit === 'C' || unit === 'F')) {
+        let extraSetup = '';
+        if (unit === 'C') {
+          extraSetup = 'set out <strong>extra linens for the sofa bed</strong>';
+        } else {
+          // A or F
+          extraSetup = 'set up the <strong>air mattress</strong> with extra linens';
+        }
+        linenReminder = `
+          <div style="margin-top:0.55rem;padding:0.55rem 0.75rem;background:#fff8e1;border:1.5px solid #f0c040;border-radius:6px;font-size:0.85rem;line-height:1.6;">
+            🛏️ <strong>${guests} guests</strong> — please ${extraSetup} and leave <strong>extra towels</strong>
+          </div>`;
+      }
 
       el.style.background = '#eef4ee';
       el.style.borderColor = '#5a8a6a';
-      el.innerHTML = `<strong>📋 Check-in today — stage the unit when done</strong>
-        ${guestLine}
+      el.innerHTML = `${headline}
         ${linenReminder}
-        <div style="margin-top:0.4rem;font-size:0.8rem;color:#3a5a4a;">
+        <div style="margin-top:0.5rem;font-size:0.8rem;color:#3a5a4a;border-top:1px solid #c0d8c0;padding-top:0.4rem;">
           💡 Turn on bedside lamps &amp; a few accent lights<br>
           🌡️ Turn the thermostat <strong>up</strong> to a comfortable temp
         </div>`;
