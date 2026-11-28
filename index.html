@@ -1942,7 +1942,13 @@ async function loadAdminSchedule() {
     adminHistoryNights = {};
     histSnap.forEach(d => {
       adminCompletedKeys.add(d.id);
-      if (d.data().nights) adminHistoryNights[d.id] = d.data().nights;
+      const data = d.data();
+      if (data.nights) {
+        // Use the date field for occupancy keying, not the doc ID (which may be an auto-ID)
+        const dateKey = data.date || (data.completedAt||'').slice(0,10) || (data.paidAt||'').slice(0,10) || d.id.slice(0,10);
+        const occKey = `${dateKey}_${data.unit||'?'}`;
+        adminHistoryNights[occKey] = (adminHistoryNights[occKey] || 0) + data.nights;
+      }
     });
     reRenderAdmin();
   });
