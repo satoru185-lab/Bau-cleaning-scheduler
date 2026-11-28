@@ -1229,6 +1229,10 @@ function _loadICalsFromStorage(ignoreExpiry = false) {
 
 function _saveICalsToStorage(icals) {
   try {
+    // Don't overwrite a good cache with blank data
+    const bookingUnits = ['A','B','C','F'];
+    const totalEvents = bookingUnits.reduce((n, u) => n + (icals[u]||[]).length, 0);
+    if (totalEvents === 0) { console.warn('Skipping cache save — no events loaded'); return; }
     localStorage.setItem(ICAL_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: icals }));
   } catch(e) {}
 }
@@ -1258,15 +1262,22 @@ async function fetchAllICals() {
       icals[u] = [];
     }
   }));
-  // If all units failed, fall back to stale cache rather than showing blank schedule
+  // Fall back to stale cache if: all fetches failed, OR all booking units returned 0 events
+  // (the Worker may return valid but empty iCal when it's throttled or misconfigured)
   const failed = Object.keys(_icalErrors);
   const allFailed = failed.length === UNITS.length;
-  if (allFailed) {
+  const bookingUnits = ['A','B','C','F'];
+  const totalEvents = bookingUnits.reduce((n, u) => n + (icals[u]||[]).length, 0);
+  const looksBlank = totalEvents === 0; // all booking units have 0 events = suspicious
+  if (allFailed || looksBlank) {
     const stale = _loadICalsFromStorage(true); // ignoreExpiry
     if (stale) {
-      console.warn('iCal fetch failed for all units — using stale cache');
-      _icalCache = stale;
-      return stale;
+      const staleEvents = bookingUnits.reduce((n, u) => n + (stale[u]||[]).length, 0);
+      if (staleEvents > 0) {
+        console.warn('iCal returned blank data — using stale cache (errors:', _icalErrors, ')');
+        _icalCache = stale;
+        return stale;
+      }
     }
   }
   // If some succeeded, save those; keep empty arrays for failed units
