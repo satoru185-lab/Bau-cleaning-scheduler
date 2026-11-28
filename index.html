@@ -2083,6 +2083,18 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
 
   const summary = document.createElement('div');
   summary.className = 'card';
+  // Detect blank iCal (all units open in next 30d is suspicious if pctNext30 = 0)
+  const icalLooksBlank = pctNext30 === 0 && bookedNext30 === 0;
+  const icalWarning = icalLooksBlank
+    ? `<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#fff3cd;border:1.5px solid #f0c040;border-radius:5px;font-size:0.8rem;color:#7a5700;display:flex;align-items:center;gap:0.6rem;">
+        ⚠️ Calendar data may not be loading correctly.
+        <button onclick="(async()=>{_icalCache=null;try{localStorage.removeItem('bauICal_v2');}catch(e){}document.getElementById('admin-schedule').dispatchEvent(new Event('rerender'));})();"
+          style="font-size:0.75rem;padding:0.2rem 0.5rem;border:1px solid #c09000;border-radius:3px;background:#fff;color:#7a5700;cursor:pointer;white-space:nowrap;">
+          🔄 Refresh calendar
+        </button>
+      </div>`
+    : '';
+
   summary.innerHTML = `<div class="card-title">Summary</div>
     <div style="font-size:0.85rem;display:flex;gap:1rem;flex-wrap:wrap;">
       ${readyLine}
@@ -2091,6 +2103,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
       ${tbdLine}
       ${totalCheckouts - claimedCount > 0 ? `<span style="color:var(--accent);">○ ${totalCheckouts - claimedCount} confirmed uncovered</span>` : ''}
     </div>
+    ${icalWarning}
     <div style="display:flex;gap:0.75rem;flex-wrap:wrap;margin-top:0.75rem;align-items:center;">
       ${Object.entries(STATUS_CONFIG).map(([k,v]) =>
         `<span style="font-size:0.68rem;padding:0.2rem 0.6rem;border-radius:3px;background:${v.bg};border:1px solid ${v.border};color:${v.color};">${v.label}</span>`
