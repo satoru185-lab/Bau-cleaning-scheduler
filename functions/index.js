@@ -5,7 +5,14 @@ const { getFirestore } = require('firebase-admin/firestore');
 initializeApp();
 const db = getFirestore();
 
-const WORKER     = 'https://green-poetry-6240.satoru185.workers.dev/';
+// Direct Airbnb iCal export URLs
+const ICAL_URLS = {
+  A: 'https://www.airbnb.com/calendar/ical/18235365.ics?t=f78efaf49f424d03b706bb45fa82a1ff',
+  B: 'https://www.airbnb.com/calendar/ical/18238047.ics?t=fa040a67ff82429dbb059ea3caf1fb62',
+  C: 'https://www.airbnb.com/calendar/ical/26917317.ics?t=e51a46ca491742c689cf28844f7586a3',
+  F: 'https://www.airbnb.com/calendar/ical/46242495.ics?t=fc82344e5e4a4558880d64c9a7b80f7d',
+  E: 'https://www.airbnb.com/calendar/ical/18241519.ics?t=d1151a4fbdc84d55a8cf0ff314ced1bf',
+};
 const UNITS      = ['A', 'B', 'C', 'F', 'E'];
 const NTFY_TOPIC = 'bau-cleaning-satoru-7x9k';
 
@@ -67,8 +74,10 @@ function classifyDay(events, day) {
 async function fetchAllICals() {
   const icals = {};
   await Promise.all(UNITS.map(async unit => {
+    const url = ICAL_URLS[unit];
+    if (!url) { icals[unit] = []; return; }
     try {
-      const res  = await fetch(`${WORKER}?unit=${unit}&_=${Date.now()}`);
+      const res  = await fetch(url);
       const text = await res.text();
       icals[unit] = text.trim().length > 20 ? parseICal(text) : [];
     } catch (e) {

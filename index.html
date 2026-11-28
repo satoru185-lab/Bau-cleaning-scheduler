@@ -1111,21 +1111,34 @@ function resumeChecklistFromSave(saved) {
 }
 
 // ── iCal / Schedule ──────────────────────────────────────
-const WORKER = 'https://green-poetry-6240.satoru185.workers.dev/';
 const UNITS = ['A','B','C','F','E'];
 
+// Direct Airbnb iCal export URLs (no Worker needed)
+const ICAL_URLS = {
+  A: 'https://www.airbnb.com/calendar/ical/18235365.ics?t=f78efaf49f424d03b706bb45fa82a1ff',
+  B: 'https://www.airbnb.com/calendar/ical/18238047.ics?t=fa040a67ff82429dbb059ea3caf1fb62',  // kept for reference, B not in UNITS booking logic
+  C: 'https://www.airbnb.com/calendar/ical/26917317.ics?t=e51a46ca491742c689cf28844f7586a3',
+  F: 'https://www.airbnb.com/calendar/ical/46242495.ics?t=fc82344e5e4a4558880d64c9a7b80f7d',
+  E: 'https://www.airbnb.com/calendar/ical/18241519.ics?t=d1151a4fbdc84d55a8cf0ff314ced1bf',
+};
+
+// Proxy to avoid CORS issues when fetching Airbnb iCal directly
+// Using allorigins as a reliable CORS proxy
 async function fetchICal(unit, attempt = 1) {
-  const timeout = attempt === 1 ? 10000 : 15000; // 10s first try, 15s retry
+  const url = ICAL_URLS[unit];
+  if (!url) throw new Error(`No iCal URL configured for unit ${unit}`);
+  const timeout = attempt === 1 ? 12000 : 18000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
+  // Use allorigins proxy to bypass CORS restriction on Airbnb .ics URLs
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}&_=${Date.now()}`;
   try {
-    const res = await fetch(`${WORKER}?unit=${unit}&_=${Date.now()}`, { cache: 'no-store', signal: controller.signal });
+    const res = await fetch(proxyUrl, { cache: 'no-store', signal: controller.signal });
     const text = await res.text();
-    // If response looks empty or too short, retry once
     if ((!text || text.trim().length < 20) && attempt === 1) {
       console.warn(`iCal unit ${unit} returned short response (attempt 1), retrying...`);
       clearTimeout(timer);
-      await new Promise(r => setTimeout(r, 1500)); // wait 1.5s before retry
+      await new Promise(r => setTimeout(r, 2000));
       return fetchICal(unit, 2);
     }
     return text;
@@ -1133,7 +1146,7 @@ async function fetchICal(unit, attempt = 1) {
     clearTimeout(timer);
     if (attempt === 1) {
       console.warn(`iCal unit ${unit} fetch failed (attempt 1): ${e.message}, retrying...`);
-      await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+      await new Promise(r => setTimeout(r, 2500));
       return fetchICal(unit, 2);
     }
     throw e;
@@ -1232,7 +1245,7 @@ function getGuests(events, day) {
 // Shared iCal cache — in-memory (per session) + localStorage (5-min TTL across opens)
 let _icalCache = null;
 let _icalErrors = {};
-const ICAL_CACHE_KEY = 'bauICal_v2';
+const ICAL_CACHE_KEY = 'bauICal_v3'; // v3: direct Airbnb URLs, no Worker
 const ICAL_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours — stale fallback persists much longer
 
 function _loadICalsFromStorage(ignoreExpiry = false) {
@@ -2108,7 +2121,7 @@ function renderAdminSchedule(slots, checkoutSlots, claims, tbdClaims, container,
   const icalWarning = icalLooksBlank
     ? `<div style="margin-top:0.5rem;padding:0.4rem 0.75rem;background:#fff3cd;border:1.5px solid #f0c040;border-radius:5px;font-size:0.8rem;color:#7a5700;display:flex;align-items:center;gap:0.6rem;">
         ⚠️ Calendar data may not be loading correctly.
-        <button onclick="(async()=>{_icalCache=null;try{localStorage.removeItem('bauICal_v2');}catch(e){}document.getElementById('admin-schedule').dispatchEvent(new Event('rerender'));})();"
+        <button onclick="(async()=>{_icalCache=null;try{localStorage.removeItem('bauICal_v3');}catch(e){}document.getElementById('admin-schedule').dispatchEvent(new Event('rerender'));})();"
           style="font-size:0.75rem;padding:0.2rem 0.5rem;border:1px solid #c09000;border-radius:3px;background:#fff;color:#7a5700;cursor:pointer;white-space:nowrap;">
           🔄 Refresh calendar
         </button>
