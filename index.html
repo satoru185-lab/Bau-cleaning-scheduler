@@ -3235,6 +3235,16 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">${t('noUpcoming')}</div></div>`;
   } else if (todaySlots.length > 0) {
     // Show each today slot as its own card
+    // Helper: linen+towel warning for 3+ guests in units that need extra setup
+    const linenWarning = (unit, guests) => {
+      if (!guests || guests < 3) return '';
+      let msg = '';
+      if (unit === 'C') msg = '🛏️ Extra linens for the sofa bed + extra towels';
+      else if (unit === 'A' || unit === 'F') msg = '🛏️ Set up air mattress + extra linens + extra towels';
+      if (!msg) return '';
+      return `<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:#fff3cd;border:1.5px solid #f0c040;border-radius:5px;font-size:0.8rem;font-weight:600;color:#7a5700;">${msg}</div>`;
+    };
+
     for (const { day, unit, nights, guests, combinedE } of todaySlots) {
       const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
       const ciKey = `${dayKey(day)}_${unit}_ci`;
@@ -3248,6 +3258,7 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
         <div class="next-clean-date">${t('today')}</div>
         <div class="next-clean-unit">${unitDisplay}${nightLabel}${guests ? '' : ' · ' + t('doneBy') + ' ' + doneBy}</div>
         ${guestLine}
+        ${linenWarning(unit, guests)}
         <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">
           ${t('openChecklist')}
         </button>`;
@@ -3255,6 +3266,14 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     }
   } else {
     // No cleans today — show just the next upcoming one as a preview (no button)
+    const linenWarning = (unit, guests) => {
+      if (!guests || guests < 3) return '';
+      let msg = '';
+      if (unit === 'C') msg = '🛏️ Extra linens for the sofa bed + extra towels';
+      else if (unit === 'A' || unit === 'F') msg = '🛏️ Set up air mattress + extra linens + extra towels';
+      if (!msg) return '';
+      return `<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:#fff3cd;border:1.5px solid #f0c040;border-radius:5px;font-size:0.8rem;font-weight:600;color:#7a5700;">${msg}</div>`;
+    };
     const { day, unit, nights, guests, combinedE } = upcomingSlots[0];
     const dateLabel = formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
@@ -3268,6 +3287,7 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
         <div class="next-clean-date">${dateLabel}</div>
         <div class="next-clean-unit">${unitDisplay}${nightLabel}${guests ? '' : ' · ' + t('doneBy') + ' ' + doneBy}</div>
         ${guestLine}
+        ${linenWarning(unit, guests)}
         <button class="open-checklist" disabled style="opacity:0.4;cursor:not-allowed;" title="Only available on the day of the clean">
           ${t('openChecklist')}
         </button>
