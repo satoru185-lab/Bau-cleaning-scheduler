@@ -3240,12 +3240,14 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
       const ciKey = `${dayKey(day)}_${unit}_ci`;
       const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
       const unitDisplay = combinedE ? `Unit ${unit} <span style="font-size:0.75rem;opacity:0.75;">(Unit E)</span>` : `Unit ${unit}`;
+      const guestLine = guests ? `<div style="font-size:0.82rem;color:#2a5a8c;margin-top:0.2rem;">👥 ${guests} guest${guests!==1?'s':''} checking in · by ${doneBy}</div>` : '';
       const card = document.createElement('div');
       card.className = 'next-clean-card';
       card.innerHTML = `
         <div class="next-clean-label">${todaySlots.length > 1 ? `Today's clean` : t('nextClean')}</div>
         <div class="next-clean-date">${t('today')}</div>
-        <div class="next-clean-unit">${unitDisplay}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
+        <div class="next-clean-unit">${unitDisplay}${nightLabel}${guests ? '' : ' · ' + t('doneBy') + ' ' + doneBy}</div>
+        ${guestLine}
         <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">
           ${t('openChecklist')}
         </button>`;
@@ -3259,11 +3261,13 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
     const ciKey = `${dayKey(day)}_${unit}_ci`;
     const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
     const unitDisplay = combinedE ? `Unit ${unit} <span style="font-size:0.75rem;opacity:0.75;">(Unit E)</span>` : `Unit ${unit}`;
+    const guestLine = guests ? `<div style="font-size:0.82rem;color:#2a5a8c;margin-top:0.2rem;">👥 ${guests} guest${guests!==1?'s':''} checking in · by ${doneBy}</div>` : '';
     area.innerHTML = `
       <div class="next-clean-card">
         <div class="next-clean-label">${t('nextClean')}</div>
         <div class="next-clean-date">${dateLabel}</div>
-        <div class="next-clean-unit">${unitDisplay}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
+        <div class="next-clean-unit">${unitDisplay}${nightLabel}${guests ? '' : ' · ' + t('doneBy') + ' ' + doneBy}</div>
+        ${guestLine}
         <button class="open-checklist" disabled style="opacity:0.4;cursor:not-allowed;" title="Only available on the day of the clean">
           ${t('openChecklist')}
         </button>
