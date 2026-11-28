@@ -3207,15 +3207,38 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
   }
   mySlots.sort((a, b) => a.day - b.day || a.unit.localeCompare(b.unit));
 
-  // Next clean banner
+  // Split into today's cleans vs upcoming
+  const todaySlots = mySlots.filter(s => sameDay(s.day, new Date()));
+  const upcomingSlots = mySlots.filter(s => !sameDay(s.day, new Date()));
+
+  // Next clean banner area — show ALL of today's cleans, or the next upcoming one
   const area = document.getElementById('next-clean-area');
   area.innerHTML = '';
+
   if (mySlots.length === 0) {
     area.innerHTML = `<div class="card"><div style="color:var(--muted);font-size:0.85rem;">${t('noUpcoming')}</div></div>`;
+  } else if (todaySlots.length > 0) {
+    // Show each today slot as its own card
+    for (const { day, unit, nights, guests, combinedE } of todaySlots) {
+      const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
+      const ciKey = `${dayKey(day)}_${unit}_ci`;
+      const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
+      const unitDisplay = combinedE ? `Unit ${unit} <span style="font-size:0.75rem;opacity:0.75;">(Unit E)</span>` : `Unit ${unit}`;
+      const card = document.createElement('div');
+      card.className = 'next-clean-card';
+      card.innerHTML = `
+        <div class="next-clean-label">${todaySlots.length > 1 ? `Today's clean` : t('nextClean')}</div>
+        <div class="next-clean-date">${t('today')}</div>
+        <div class="next-clean-unit">${unitDisplay}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
+        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">
+          ${t('openChecklist')}
+        </button>`;
+      area.appendChild(card);
+    }
   } else {
-    const { day, unit, nights, guests, combinedE } = mySlots[0];
-    const isToday = sameDay(day, new Date());
-    const dateLabel = isToday ? t('today') : formatDay(day);
+    // No cleans today — show just the next upcoming one as a preview (no button)
+    const { day, unit, nights, guests, combinedE } = upcomingSlots[0];
+    const dateLabel = formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? ` · ${nights} night${nights===1?'':'s'}` : '';
     const ciKey = `${dayKey(day)}_${unit}_ci`;
     const doneBy = checkinTimes[ciKey] || DEFAULT_CHECKIN;
@@ -3225,28 +3248,29 @@ function renderHomeTab(slots, claims, completedKeys = new Set()) {
         <div class="next-clean-label">${t('nextClean')}</div>
         <div class="next-clean-date">${dateLabel}</div>
         <div class="next-clean-unit">${unitDisplay}${nightLabel} · ${t('doneBy')} ${doneBy}</div>
-        <button class="open-checklist" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">
+        <button class="open-checklist" disabled style="opacity:0.4;cursor:not-allowed;" title="Only available on the day of the clean">
           ${t('openChecklist')}
         </button>
+        <div style="font-size:0.72rem;color:var(--muted);margin-top:0.4rem;text-align:center;">Available to start on ${dateLabel}</div>
       </div>`;
   }
 
-  // My claims list (upcoming only — completed ones are in Past Cleans)
+  // My claims list — upcoming only (not today, those are shown above as cards)
   const list = document.getElementById('my-claims-list');
-  if (mySlots.length === 0) {
-    list.textContent = t('noneClaimed');
+  if (upcomingSlots.length === 0) {
+    list.textContent = todaySlots.length > 0 ? '' : t('noneClaimed');
     return;
   }
   list.innerHTML = '';
-  for (const { day, unit, nights, guests, combinedE } of mySlots) {
-    const isToday = sameDay(day, new Date());
+  for (const { day, unit, nights, guests, combinedE } of upcomingSlots) {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border);';
-    const dateLabel = isToday ? `<span style="color:var(--accent);font-weight:500;">${t('today')}</span>` : formatDay(day);
+    const dateLabel = formatDay(day);
     const nightLabel = (nights && _acc === 'full') ? `<span style="color:var(--muted);font-size:0.72rem;"> · ${nights}n</span>` : '';
     const unitLabel = combinedE ? `Unit ${unit} <span style="color:var(--muted);font-size:0.7rem;">(Unit E)</span>` : `Unit ${unit}`;
     row.innerHTML = `<span>${dateLabel} — ${unitLabel}${nightLabel}</span>
-      <button style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:pointer;touch-action:manipulation;" onclick="openChecklist('${unit}','${dayKey(day)}','${nights||0}','${guests||0}','${combinedE?'E':''}')">${t('checklist')}</button>`;
+      <button disabled title="Only available on the day of the clean"
+        style="font-family:'DM Mono',monospace;font-size:0.68rem;padding:0.25rem 0.6rem;border:1px solid var(--border);border-radius:3px;background:var(--paper);cursor:not-allowed;opacity:0.4;touch-action:manipulation;">${t('checklist')}</button>`;
     list.appendChild(row);
   }
 }
